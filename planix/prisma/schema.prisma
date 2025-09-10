@@ -1,0 +1,123 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  manager
+  developer
+  leader
+}
+
+enum NotificationType {
+  delay
+  risk
+  completion
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  email     String   @unique
+  role      UserRole @default(developer)
+  teamId    Int?
+  team      Team?    @relation(fields: [teamId], references: [id])
+  ownedItems BacklogItem[]
+  workloadDistributions WorkloadDistribution[]
+  notifications Notification[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Team {
+  id        Int      @id @default(autoincrement())
+  name      String
+  members   User[]
+  sprints   Sprint[]
+  createdAt DateTime @default(now())
+}
+
+model BacklogItem {
+  id          Int      @id @default(autoincrement())
+  type        String
+  title       String
+  description String?
+  storyPoints Int      @default(0)
+  ownerId     Int?
+  owner       User?    @relation(fields: [ownerId], references: [id])
+  dependencies BacklogItem[] @relation("BacklogItemDependencies")
+  dependents  BacklogItem[] @relation("BacklogItemDependencies")
+  priority    Int      @default(0)
+  status      String   @default("todo")
+  sprintId    Int?
+  sprint      Sprint?  @relation(fields: [sprintId], references: [id])
+  taskCompletions TaskCompletion[]
+  delayHistory DelayHistory[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Sprint {
+  id          Int      @id @default(autoincrement())
+  name        String
+  goals       String
+  startDate   DateTime
+  endDate     DateTime
+  teamId      Int
+  team        Team     @relation(fields: [teamId], references: [id])
+  items       BacklogItem[]
+  velocityMetrics VelocityMetric[]
+  workloadDistributions WorkloadDistribution[]
+  scopeAdjusted Boolean @default(false)
+}
+
+model VelocityMetric {
+  id              Int      @id @default(autoincrement())
+  sprintId        Int
+  sprint          Sprint   @relation(fields: [sprintId], references: [id])
+  averagePoints   Float    @default(0)
+  createdAt     DateTime @default(now())
+}
+
+model TaskCompletion {
+  id          Int      @id @default(autoincrement())
+  backlogItemId Int
+  backlogItem BacklogItem @relation(fields: [backlogItemId], references: [id])
+  plannedTime  String
+  actualTime   String?
+  delayReason  String?
+}
+
+model WorkloadDistribution {
+  id             Int      @id @default(autoincrement())
+  userId         Int
+  user           User     @relation(fields: [userId], references: [id])
+  sprintId       Int
+  sprint         Sprint   @relation(fields: [sprintId], references: [id])
+  assignedPoints Int      @default(0)
+  completedPoints Int     @default(0)
+  createdAt      DateTime @default(now())
+}
+
+model DelayHistory {
+  id            Int        @id @default(autoincrement())
+  backlogItemId Int
+  backlogItem   BacklogItem @relation(fields: [backlogItemId], references: [id])
+  delayDuration BigInt     // Milliseconds
+  reason        String
+  detectedAt    DateTime   @default(now())
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  type      NotificationType
+  message   String
+  sentAt    DateTime @default(now())
+}
