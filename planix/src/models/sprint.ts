@@ -1,7 +1,16 @@
 import { prisma } from '@/lib/prisma';
 
 export async function getSprints() {
-  return await prisma.sprint.findMany({ include: { team: true, items: true } });
+  return await prisma.sprint.findMany({ 
+    include: { 
+      team: {
+        include: {
+          members: true
+        }
+      }, 
+      items: true 
+    } 
+  });
 }
 
 export async function createSprint(data: { name: string; goals: string; startDate: Date; endDate: Date; teamId: number; scopeAdjusted: boolean }) {

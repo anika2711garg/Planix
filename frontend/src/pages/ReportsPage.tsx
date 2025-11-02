@@ -1,28 +1,78 @@
 "use client";
 
-import { useState } from 'react';
-import { Download, FileText, BarChart2, Star, CheckSquare } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Download, FileText, BarChart2, Star, CheckSquare, Users, AlertTriangle, TrendingUp } from 'lucide-react';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import { useAuth } from '../contexts/AuthContext';
 // FIX: Import the 'UserOptions' type for strong typing.
 import type { UserOptions } from 'jspdf-autotable';
 
+const API_BASE = 'http://localhost:3000/api';
+
+// Helper function to get auth token
+const getToken = () => localStorage.getItem('auth_token');
+
+// Types for API responses
+interface Sprint {
+  id: number;
+  name: string;
+  teamName: string;
+  startDate: string;
+  endDate: string;
+  totalTasks: number;
+  completedTasks: number;
+  isActive: boolean;
+}
+
+interface ReportData {
+  sprintName?: string;
+  teamName?: string;
+  startDate?: string;
+  endDate?: string;
+  goals?: string[];
+  summary?: {
+    completed: number;
+    total: number;
+    completionRate?: number;
+  };
+  taskBreakdown?: {
+    total: number;
+    completed: number;
+    inProgress: number;
+    todo: number;
+  };
+  achievements?: string[];
+  teamMembers?: string[];
+  sprints?: any[];
+  memberPerformance?: any[];
+  riskAssessment?: {
+    level: string;
+    message: string;
+  };
+  recommendations?: string[];
+}
+
 // FIX: Re-add the custom interface to explicitly define the 'autoTable' method.
-// This tells TypeScript that the method exists and what its parameters are.
 interface jsPDFWithAutoTable extends jsPDF {
   autoTable: (options: UserOptions) => jsPDF;
 }
 
 // --- MAIN PAGE COMPONENT ---
 const ReportsPage = () => {
+  const { user } = useAuth();
+  
   // State for the report generation form
   const [reportType, setReportType] = useState('Sprint Summary');
-  const [selectedSprint, setSelectedSprint] = useState('Sprint 24 (Current)');
+  const [selectedSprint, setSelectedSprint] = useState('');
+  const [selectedSprintId, setSelectedSprintId] = useState<number | null>(null);
   const [startDate, setStartDate] = useState('2025-10-01');
   const [endDate, setEndDate] = useState('2025-10-15');
-
-  // Mock data for the report content
-  const reportData = {
+  
+  // State for API data
+  const [loading, setLoading] = useState(false);
+  const [availableSprints, setAvailableSprints] = useState<Sprint[]>([]);
+  const [reportData, setReportData] = useState<ReportData>({
     goals: [
       'Complete user authentication system',
       'Implement dashboard analytics',
@@ -37,14 +87,179 @@ const ReportsPage = () => {
       'Deployed real-time notification system',
       'Completed 15 tasks ahead of schedule',
     ],
+  });
+
+  // Fetch available sprints on component mount
+  useEffect(() => {
+    // Check if user is logged in first
+    const token = getToken();
+    if (!token) {
+      console.warn('⚠️ No authentication token found. Please login first.');
+      // Still try to fetch with fallback data
+    }
+    fetchAvailableSprints();
+  }, []);
+
+  const fetchAvailableSprints = async () => {
+    try {
+      const token = getToken();
+      const response = await fetch(`${API_BASE}/reports?type=available-sprints`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
+      
+      if (response.ok) {
+        const sprints = await response.json();
+        console.log('🔍 Fetched sprints:', sprints); // Debug log
+        setAvailableSprints(sprints);
+        
+        // Set default selected sprint to the most recent active one
+        const activeSprint = sprints.find((sprint: Sprint) => sprint.isActive) || sprints[0];
+        if (activeSprint) {
+          setSelectedSprint(`${activeSprint.name} (${activeSprint.isActive ? 'Current' : 'Completed'})`);
+          setSelectedSprintId(activeSprint.id);
+        }
+      } else {
+        console.error('❌ Failed to fetch sprints:', response.status, response.statusText);
+        // Fallback: Add sample sprint data for testing
+        const fallbackSprints = [
+          {
+            id: 1,
+            name: 'Demo Current Sprint',
+            teamName: 'Team',
+            startDate: '2025-10-25',
+            endDate: '2025-11-04',
+            totalTasks: 4,
+            completedTasks: 2,
+            isActive: true
+          },
+          {
+            id: 2,
+            name: 'Integration Test Sprint',
+            teamName: 'Team',
+            startDate: '2025-11-01',
+            endDate: '2025-11-15',
+            totalTasks: 0,
+            completedTasks: 0,
+            isActive: true
+          }
+        ];
+        setAvailableSprints(fallbackSprints);
+        setSelectedSprint('Demo Current Sprint (Current)');
+        setSelectedSprintId(1);
+      }
+    } catch (error) {
+      console.error('Error fetching available sprints:', error);
+      // Fallback data on network error
+      const fallbackSprints = [
+        {
+          id: 1,
+          name: 'Demo Current Sprint',
+          teamName: 'Team',
+          startDate: '2025-10-25',
+          endDate: '2025-11-04',
+          totalTasks: 4,
+          completedTasks: 2,
+          isActive: true
+        }
+      ];
+      setAvailableSprints(fallbackSprints);
+      setSelectedSprint('Demo Current Sprint (Current)');
+      setSelectedSprintId(1);
+    }
+  };
+
+  const fetchReportData = async () => {
+    if (!selectedSprintId) return;
+    
+    setLoading(true);
+    try {
+      const token = getToken();
+      let apiUrl = '';
+      
+      switch (reportType) {
+        case 'Sprint Summary':
+          apiUrl = `${API_BASE}/reports?type=sprint-summary&sprintId=${selectedSprintId}`;
+          break;
+        case 'Velocity Report':
+          apiUrl = `${API_BASE}/reports?type=velocity&startDate=${startDate}&endDate=${endDate}`;
+          break;
+        case 'Team Performance':
+          // Get team ID from selected sprint
+          const selectedSprintData = availableSprints.find(s => s.id === selectedSprintId);
+          if (selectedSprintData) {
+            apiUrl = `${API_BASE}/reports?type=team-performance&teamId=1&startDate=${startDate}&endDate=${endDate}`;
+          }
+          break;
+        case 'Burndown Analysis':
+          apiUrl = `${API_BASE}/reports?type=burndown&sprintId=${selectedSprintId}`;
+          break;
+        default:
+          return;
+      }
+      
+      console.log('🔍 Fetching report data from:', apiUrl);
+      
+      const response = await fetch(apiUrl, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('📊 Report data received:', data);
+        
+        // Transform the data based on report type
+        let transformedData = { ...data };
+        
+        if (reportType === 'Sprint Summary') {
+          transformedData = {
+            sprintName: data.sprintName || selectedSprint,
+            teamName: data.teamName || 'Team',
+            goals: data.goals || ['Complete planned tasks', 'Maintain quality', 'Meet deadlines'],
+            summary: {
+              completed: data.summary?.completed || 0,
+              total: data.summary?.total || 0,
+              completionRate: data.summary?.completionRate || 0
+            },
+            achievements: data.achievements || ['Sprint initiated successfully'],
+            taskBreakdown: data.taskBreakdown || { total: 0, completed: 0, inProgress: 0, todo: 0 },
+            teamMembers: data.teamMembers || []
+          };
+        }
+        
+        setReportData(transformedData);
+      } else {
+        console.error('Failed to fetch report data:', response.status);
+        // Keep existing fallback data
+      }
+    } catch (error) {
+      console.error('Error fetching report data:', error);
+      // Keep existing fallback data
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch report data when sprint or report type changes
+  useEffect(() => {
+    if (selectedSprintId) {
+      fetchReportData();
+    }
+  }, [selectedSprintId, reportType, startDate, endDate]);
+
+  // Debug function - can be called from console
+  (window as any).debugReports = () => {
+    console.log('🔍 Debug Info:');
+    console.log('Available Sprints:', availableSprints);
+    console.log('Selected Sprint:', selectedSprint);
+    console.log('Selected Sprint ID:', selectedSprintId);
+    console.log('Auth Token:', getToken());
+    console.log('API Base:', API_BASE);
   };
 
   const handlePdfExport = () => {
     // FIX: Add the type cast back.
-    // This tells TypeScript to treat the 'doc' object as our extended type,
-    // which includes the 'autoTable' method.
     const doc = new jsPDF() as jsPDFWithAutoTable;
-    const docTitle = `${selectedSprint} ${reportType}`;
+    const docTitle = `${reportData.sprintName || selectedSprint} ${reportType}`;
 
     doc.setFontSize(20);
     doc.text(docTitle, 14, 22);
@@ -53,44 +268,166 @@ const ReportsPage = () => {
     doc.setTextColor(100);
     doc.text(`Date Range: ${startDate} to ${endDate}`, 14, 30);
     
-    // The 'autoTable' calls will now pass type-checking.
-    doc.autoTable({
-      startY: 40,
-      head: [['Sprint Goals']],
-      body: reportData.goals.map(goal => [goal]),
-      theme: 'grid',
-      headStyles: { fillColor: [78, 115, 223] },
-    });
+    if (reportData.teamName) {
+      doc.text(`Team: ${reportData.teamName}`, 14, 38);
+    }
     
-    doc.autoTable({
-      head: [['Progress Summary', 'Value']],
-      body: [
+    // Sprint Goals section
+    if (reportData.goals && reportData.goals.length > 0) {
+      doc.autoTable({
+        startY: 50,
+        head: [['Sprint Goals']],
+        body: reportData.goals.map(goal => [goal]),
+        theme: 'grid',
+        headStyles: { fillColor: [78, 115, 223] },
+      });
+    }
+    
+    // Progress Summary section
+    if (reportData.summary) {
+      const summaryRows = [
         ['Completed Points', `${reportData.summary.completed} pts`],
         ['Total Points', `${reportData.summary.total} pts`],
-      ],
-      theme: 'striped',
-    });
+      ];
+      
+      if (reportData.summary.completionRate) {
+        summaryRows.push(['Completion Rate', `${reportData.summary.completionRate}%`]);
+      }
+      
+      if (reportData.taskBreakdown) {
+        summaryRows.push(
+          ['Total Tasks', `${reportData.taskBreakdown.total}`],
+          ['Completed Tasks', `${reportData.taskBreakdown.completed}`],
+          ['In Progress Tasks', `${reportData.taskBreakdown.inProgress}`],
+          ['Todo Tasks', `${reportData.taskBreakdown.todo}`]
+        );
+      }
+      
+      doc.autoTable({
+        head: [['Progress Summary', 'Value']],
+        body: summaryRows,
+        theme: 'striped',
+      });
+    }
 
-    doc.autoTable({
-      head: [['Key Achievements']],
-      body: reportData.achievements.map(ach => [ach]),
-      theme: 'grid',
-      headStyles: { fillColor: [28, 200, 138] },
-    });
+    // Key Achievements section
+    if (reportData.achievements && reportData.achievements.length > 0) {
+      doc.autoTable({
+        head: [['Key Achievements']],
+        body: reportData.achievements.map(ach => [ach]),
+        theme: 'grid',
+        headStyles: { fillColor: [28, 200, 138] },
+      });
+    }
 
-    doc.save(`${docTitle.replace(/ /g, '_')}.pdf`);
+    // Team Members section (if available)
+    if (reportData.teamMembers && reportData.teamMembers.length > 0) {
+      doc.autoTable({
+        head: [['Team Members']],
+        body: reportData.teamMembers.map(member => [member]),
+        theme: 'grid',
+        headStyles: { fillColor: [255, 165, 0] },
+      });
+    }
+
+    // Report-specific sections
+    if (reportType === 'Team Performance' && reportData.memberPerformance) {
+      doc.autoTable({
+        head: [['Member', 'Assigned Points', 'Completed Points', 'Completion Rate']],
+        body: reportData.memberPerformance.slice(0, 10).map((member: any) => [
+          member.username,
+          member.totalAssigned.toString(),
+          member.totalCompleted.toString(),
+          `${member.completionRate}%`
+        ]),
+        theme: 'striped',
+        headStyles: { fillColor: [67, 56, 202] },
+      });
+    }
+
+    if (reportType === 'Velocity Report' && reportData.sprints) {
+      doc.autoTable({
+        head: [['Sprint', 'Points Completed', 'Tasks Completed']],
+        body: reportData.sprints.slice(-5).map((sprint: any) => [
+          sprint.sprintName,
+          sprint.points.toString(),
+          sprint.tasksCompleted.toString()
+        ]),
+        theme: 'striped',
+        headStyles: { fillColor: [34, 197, 94] },
+      });
+    }
+
+    if (reportType === 'Burndown Analysis' && reportData.riskAssessment) {
+      doc.autoTable({
+        head: [['Risk Assessment']],
+        body: [
+          [`Risk Level: ${reportData.riskAssessment.level}`],
+          [reportData.riskAssessment.message]
+        ],
+        theme: 'grid',
+        headStyles: { 
+          fillColor: reportData.riskAssessment.level === 'High' ? [239, 68, 68] : 
+                     reportData.riskAssessment.level === 'Medium' ? [245, 158, 11] : [34, 197, 94]
+        },
+      });
+
+      if (reportData.recommendations) {
+        doc.autoTable({
+          head: [['Recommendations']],
+          body: reportData.recommendations.map((rec: string) => [rec]),
+          theme: 'grid',
+          headStyles: { fillColor: [59, 130, 246] },
+        });
+      }
+    }
+
+    doc.save(`${docTitle.replace(/ /g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
   const handleCsvExport = () => {
     const headers = ['Category', 'Details'];
     const rows = [
-      ['Report Title', `${selectedSprint} ${reportType}`],
+      ['Report Title', `${reportData.sprintName || selectedSprint} ${reportType}`],
       ['Date Range', `${startDate} to ${endDate}`],
-      ['Sprint Goals', `"${reportData.goals.join(', ')}"`],
-      ['Completed Points', reportData.summary.completed],
-      ['Total Points', reportData.summary.total],
-      ['Key Achievements', `"${reportData.achievements.join(', ')}"`]
+      ...(reportData.teamName ? [['Team', reportData.teamName]] : []),
+      ...(reportData.goals && reportData.goals.length > 0 ? [['Sprint Goals', `"${reportData.goals.join(', ')}"`]] : []),
+      ...(reportData.summary ? [
+        ['Completed Points', reportData.summary.completed.toString()],
+        ['Total Points', reportData.summary.total.toString()],
+        ...(reportData.summary.completionRate ? [['Completion Rate', `${reportData.summary.completionRate}%`]] : [])
+      ] : []),
+      ...(reportData.achievements && reportData.achievements.length > 0 ? [['Key Achievements', `"${reportData.achievements.join(', ')}"`]] : []),
+      ...(reportData.teamMembers && reportData.teamMembers.length > 0 ? [['Team Members', `"${reportData.teamMembers.join(', ')}"`]] : [])
     ];
+
+    // Add report-specific data
+    if (reportType === 'Team Performance' && reportData.memberPerformance) {
+      rows.push(['', '']); // Empty row separator
+      rows.push(['Member Performance', '']);
+      reportData.memberPerformance.forEach((member: any) => {
+        rows.push([member.username, `${member.totalCompleted}/${member.totalAssigned} points (${member.completionRate}%)`]);
+      });
+    }
+
+    if (reportType === 'Velocity Report' && reportData.sprints) {
+      rows.push(['', '']); // Empty row separator
+      rows.push(['Sprint Velocity', '']);
+      reportData.sprints.forEach((sprint: any) => {
+        rows.push([sprint.sprintName, `${sprint.points} points, ${sprint.tasksCompleted} tasks`]);
+      });
+    }
+
+    if (reportType === 'Burndown Analysis') {
+      if (reportData.riskAssessment) {
+        rows.push(['', '']); // Empty row separator
+        rows.push(['Risk Assessment', `${reportData.riskAssessment.level}: ${reportData.riskAssessment.message}`]);
+      }
+      
+      if (reportData.recommendations) {
+        rows.push(['Recommendations', `"${reportData.recommendations.join('; ')}"`]);
+      }
+    }
 
     const csvContent = "data:text/csv;charset=utf-8," 
       + headers.join(",") + "\n" 
@@ -99,10 +436,20 @@ const ReportsPage = () => {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `${selectedSprint.replace(/ /g, '_')}_${reportType.replace(/ /g, '_')}.csv`);
+    link.setAttribute("download", `${(reportData.sprintName || selectedSprint).replace(/ /g, '_')}_${reportType.replace(/ /g, '_')}_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleSprintChange = (sprintName: string) => {
+    setSelectedSprint(sprintName);
+    const sprint = availableSprints.find(s => 
+      `${s.name} (${s.isActive ? 'Current' : 'Completed'})` === sprintName
+    );
+    if (sprint) {
+      setSelectedSprintId(sprint.id);
+    }
   };
 
 
@@ -136,11 +483,20 @@ const ReportsPage = () => {
               
               <div className="md:col-span-2">
                 <label htmlFor="sprint" className="block text-sm font-medium text-gray-300 mb-2">Select Sprint</label>
-                <select id="sprint" value={selectedSprint} onChange={(e) => setSelectedSprint(e.target.value)} className="w-full pl-4 pr-4 py-3 bg-slate-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                  <option>Sprint 24 (Current)</option>
-                  <option>Sprint 23</option>
-                  <option>Sprint 22</option>
-                  <option>Sprint 21</option>
+                <select 
+                  id="sprint" 
+                  value={selectedSprint} 
+                  onChange={(e) => handleSprintChange(e.target.value)} 
+                  className="w-full pl-4 pr-4 py-3 bg-slate-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  {availableSprints.map(sprint => (
+                    <option key={sprint.id} value={`${sprint.name} (${sprint.isActive ? 'Current' : 'Completed'})`}>
+                      {sprint.name} ({sprint.isActive ? 'Current' : 'Completed'}) - {sprint.teamName}
+                    </option>
+                  ))}
+                  {availableSprints.length === 0 && (
+                    <option value="">No sprints available</option>
+                  )}
                 </select>
               </div>
               
@@ -156,10 +512,7 @@ const ReportsPage = () => {
             </div>
 
             <div className="mt-8 flex flex-wrap gap-4">
-              <button onClick={handlePdfExport} className="flex items-center gap-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-600 text-white font-bold px-5 py-3 rounded-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300">
-                <Download size={20} />
-                Export as PDF
-              </button>
+             
               <button onClick={handleCsvExport} className="flex items-center gap-2 bg-gradient-to-r from-teal-500 to-green-600 hover:from-teal-600 hover:to-green-600 text-white font-bold px-5 py-3 rounded-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300">
                 <Download size={20} />
                 Export as CSV
@@ -167,64 +520,7 @@ const ReportsPage = () => {
             </div>
           </div>
 
-          {/* Right Side: Report Preview */}
-          <div className="bg-black/30 backdrop-blur-lg rounded-2xl p-6 border border-white/10 shadow-lg">
-            <h3 className="text-xl font-semibold text-gray-200 mb-6">Live Preview</h3>
-            <div className="bg-slate-800/50 border border-white/10 rounded-xl p-6 min-h-[400px]">
-              <div className="flex items-center gap-4 mb-6">
-                <div className="p-3 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl shadow-lg">
-                  <FileText className="text-white" size={24} />
-                </div>
-                <div>
-                  <h4 className="text-lg font-semibold text-white">{`${selectedSprint} ${reportType}`}</h4>
-                  <p className="text-sm text-gray-400">{`For period: ${startDate} to ${endDate}`}</p>
-                </div>
-              </div>
 
-              <div className="space-y-6">
-                <div className="border-b border-white/10 pb-4">
-                  <h5 className="flex items-center gap-2 text-sm font-semibold text-gray-300 mb-3">
-                    <CheckSquare size={16} className="text-indigo-400" />
-                    Sprint Goals
-                  </h5>
-                  <ul className="list-inside text-sm text-gray-400 space-y-2 pl-2">
-                    {reportData.goals.map((goal, i) => (
-                      <li key={i} className="flex items-start gap-2"><span className="text-indigo-400 mt-1">&bull;</span> {goal}</li>
-                    ))}
-                  </ul>
-                </div>
-                
-                <div className="border-b border-white/10 pb-4">
-                   <h5 className="flex items-center gap-2 text-sm font-semibold text-gray-300 mb-3">
-                     <BarChart2 size={16} className="text-indigo-400" />
-                     Progress Summary
-                   </h5>
-                   <div className="grid grid-cols-2 gap-4 pl-2">
-                      <div className="bg-white/5 p-4 rounded-lg">
-                        <p className="text-xs text-gray-400">Completed</p>
-                        <p className="text-3xl font-bold text-green-400">{reportData.summary.completed} <span className="text-lg">pts</span></p>
-                      </div>
-                       <div className="bg-white/5 p-4 rounded-lg">
-                        <p className="text-xs text-gray-400">Total</p>
-                        <p className="text-3xl font-bold text-white">{reportData.summary.total} <span className="text-lg">pts</span></p>
-                      </div>
-                   </div>
-                </div>
-                
-                <div>
-                   <h5 className="flex items-center gap-2 text-sm font-semibold text-gray-300 mb-3">
-                    <Star size={16} className="text-indigo-400" />
-                    Key Achievements
-                  </h5>
-                  <ul className="list-inside text-sm text-gray-400 space-y-2 pl-2">
-                     {reportData.achievements.map((ach, i) => (
-                      <li key={i} className="flex items-start gap-2"><span className="text-indigo-400 mt-1">&bull;</span> {ach}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </div>

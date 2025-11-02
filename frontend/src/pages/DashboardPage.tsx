@@ -1,5 +1,8 @@
+import React from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Target, CalendarDays, ShieldCheck, Lightbulb, TrendingUp, AlertTriangle } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { useDashboard } from '../hooks/useApi';
 
 // --- Reusable Custom Tooltip for Charts ---
 // --- Reusable Custom Tooltip for Charts ---
@@ -37,8 +40,10 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
 
 // --- CARD COMPONENTS ---
 
-const ProgressCard = () => {
-  const progress = 65; // Example progress percentage
+const ProgressCard = ({ currentSprint }: { currentSprint: any }) => {
+  const progress = currentSprint?.progressPercentage || 0;
+  const completedPoints = currentSprint?.completedStoryPoints || 0;
+  const totalPoints = currentSprint?.totalStoryPoints || 0;
   const circumference = 2 * Math.PI * 45; // 2 * pi * radius
 
   return (
@@ -48,7 +53,7 @@ const ProgressCard = () => {
           <Target size={18} className="mr-2" />
           <h3 className="font-semibold">Sprint Progress</h3>
         </div>
-        <p className="text-gray-400 text-sm">You've completed 65 of 100 story points.</p>
+        <p className="text-gray-400 text-sm">You've completed {completedPoints} of {totalPoints} story points.</p>
       </div>
       <div className="relative flex items-center justify-center mt-4">
         <svg className="w-32 h-32 transform -rotate-90">
@@ -72,34 +77,55 @@ const ProgressCard = () => {
   );
 };
 
-const TimeRemainingCard = () => (
-  <div className="bg-black/30 backdrop-blur-lg rounded-2xl p-6 border border-white/10 shadow-lg flex flex-col justify-center items-center text-center h-full">
-    <div className="flex items-center text-gray-400 mb-2">
-      <CalendarDays size={18} className="mr-2" />
-      <h3 className="font-semibold">Time Remaining</h3>
-    </div>
-    <p className="text-6xl font-bold text-white my-2">8</p>
-    <p className="text-gray-400">days left</p>
-    <p className="text-sm text-indigo-300 mt-2">Sprint ends Oct 15, 2025</p>
-  </div>
-);
+const TimeRemainingCard = ({ currentSprint }: { currentSprint: any }) => {
+  const daysRemaining = currentSprint?.daysRemaining || 0;
+  const endDate = currentSprint?.endDate ? new Date(currentSprint.endDate).toLocaleDateString('en-US', { 
+    year: 'numeric', 
+    month: 'short', 
+    day: 'numeric' 
+  }) : 'No sprint active';
 
-const SprintRiskCard = () => (
-  <div className="bg-black/30 backdrop-blur-lg rounded-2xl p-6 border border-white/10 shadow-lg flex flex-col justify-center items-center text-center h-full">
-    <div className="flex items-center text-gray-400 mb-2">
-      <ShieldCheck size={18} className="mr-2" />
-      <h3 className="font-semibold">Sprint Risk</h3>
+  return (
+    <div className="bg-black/30 backdrop-blur-lg rounded-2xl p-6 border border-white/10 shadow-lg flex flex-col justify-center items-center text-center h-full">
+      <div className="flex items-center text-gray-400 mb-2">
+        <CalendarDays size={18} className="mr-2" />
+        <h3 className="font-semibold">Time Remaining</h3>
+      </div>
+      <p className="text-6xl font-bold text-white my-2">{daysRemaining}</p>
+      <p className="text-gray-400">days left</p>
+      <p className="text-sm text-indigo-300 mt-2">Sprint ends {endDate}</p>
     </div>
-    <p className="text-4xl font-bold text-green-400 my-4">Low</p>
-    <p className="text-gray-400">Team is on track to meet the sprint goals successfully.</p>
-  </div>
-);
+  );
+};
+
+const SprintRiskCard = ({ currentSprint }: { currentSprint: any }) => {
+  const riskLevel = currentSprint?.riskLevel || 'Unknown';
+  const riskColor = riskLevel === 'Low' ? 'text-green-400' : 
+                   riskLevel === 'Medium' ? 'text-yellow-400' : 'text-red-400';
+  
+  const riskMessage = riskLevel === 'Low' 
+    ? 'Team is on track to meet the sprint goals successfully.'
+    : riskLevel === 'Medium'
+    ? 'Some sprint items may be at risk. Monitor progress closely.'
+    : 'Sprint is at high risk. Consider scope adjustment or additional resources.';
+
+  return (
+    <div className="bg-black/30 backdrop-blur-lg rounded-2xl p-6 border border-white/10 shadow-lg flex flex-col justify-center items-center text-center h-full">
+      <div className="flex items-center text-gray-400 mb-2">
+        <ShieldCheck size={18} className="mr-2" />
+        <h3 className="font-semibold">Sprint Risk</h3>
+      </div>
+      <p className={`text-4xl font-bold my-4 ${riskColor}`}>{riskLevel}</p>
+      <p className="text-gray-400">{riskMessage}</p>
+    </div>
+  );
+};
 
 
 // --- CHART & RECOMMENDATIONS COMPONENTS ---
 
-const PredictiveBurndownChart = () => {
-  const data = [
+const PredictiveBurndownChart = ({ burndownData }: { burndownData: any[] }) => {
+  const data = burndownData && burndownData.length > 0 ? burndownData : [
     { day: 0, ideal: 100, actual: 100 },
     { day: 1, ideal: 90, actual: 98 },
     { day: 2, ideal: 80, actual: 85 },
@@ -133,24 +159,35 @@ const PredictiveBurndownChart = () => {
   );
 };
 
-const AIRecommendations = () => {
-  const recommendations = [
-    { icon: <Lightbulb className="text-yellow-400" />, title: "Scope Adjustment", text: "Consider moving 'Task-124' to the next sprint to reduce risk." },
-    { icon: <TrendingUp className="text-green-400" />, title: "Velocity Boost", text: "John has available capacity. Assign him a new high-priority task." },
-    { icon: <AlertTriangle className="text-red-400" />, title: "Potential Blocker", text: "The API integration for 'Feature-Z' is behind schedule." },
+const AIRecommendations = ({ recommendations }: { recommendations: any[] }) => {
+  const defaultRecommendations = [
+    { type: 'scope', title: "Scope Adjustment", message: "Consider moving some items to the next sprint to reduce risk.", priority: 'medium' },
+    { type: 'velocity', title: "Velocity Boost", message: "Team has available capacity for additional tasks.", priority: 'low' },
+    { type: 'blocker', title: "No Critical Issues", message: "All sprint items are progressing smoothly.", priority: 'low' },
   ];
+
+  const displayRecommendations = recommendations && recommendations.length > 0 ? recommendations : defaultRecommendations;
+
+  const getIcon = (type: string) => {
+    switch (type) {
+      case 'scope': return <Lightbulb className="text-yellow-400" />;
+      case 'velocity': return <TrendingUp className="text-green-400" />;
+      case 'blocker': return <AlertTriangle className="text-red-400" />;
+      default: return <Lightbulb className="text-blue-400" />;
+    }
+  };
 
   return (
     <div className="bg-black/30 backdrop-blur-lg rounded-2xl p-6 border border-white/10 shadow-lg h-full">
       <h3 className="text-xl font-semibold text-gray-200 mb-1">AI-Powered Insights ✨</h3>
       <p className="text-sm text-gray-400 mb-6">Proactive recommendations to keep your sprint on track.</p>
       <div className="space-y-4">
-        {recommendations.map((rec, index) => (
+        {displayRecommendations.map((rec, index) => (
           <div key={index} className="flex items-start p-4 bg-white/5 rounded-lg hover:bg-white/10 transition-colors duration-200">
-            <div className="p-2 mr-4">{rec.icon}</div>
+            <div className="p-2 mr-4">{getIcon(rec.type)}</div>
             <div>
               <h4 className="font-semibold text-white">{rec.title}</h4>
-              <p className="text-sm text-gray-400">{rec.text}</p>
+              <p className="text-sm text-gray-400">{rec.message}</p>
             </div>
           </div>
         ))}
@@ -163,6 +200,40 @@ const AIRecommendations = () => {
 // --- MAIN DASHBOARD PAGE ---
 
 const DashboardPage = () => {
+  const { user } = useAuth();
+  const { dashboardData, loading, error } = useDashboard();
+
+  if (loading) {
+    return (
+      <div className="relative min-h-screen w-full flex items-center justify-center bg-slate-900 text-white">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-white mx-auto mb-4"></div>
+          <p>Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="relative min-h-screen w-full flex items-center justify-center bg-slate-900 text-white">
+        <div className="text-center">
+          <p className="text-red-400 mb-4">Error: {error}</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="px-4 py-2 bg-blue-600 rounded hover:bg-blue-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const currentSprint = dashboardData?.currentSprint;
+  const burndownData = dashboardData?.burndownData || [];
+  const aiRecommendations = dashboardData?.aiRecommendations || [];
+
   return (
     <div className="relative min-h-screen w-full overflow-y-auto bg-slate-900 p-4 sm:p-6 md:p-8 text-white">
       {/* Animated Aurora Background */}
@@ -172,22 +243,30 @@ const DashboardPage = () => {
       
       <div className="relative z-10">
         <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white mb-1">Welcome, Alex!</h1>
-          <p className="text-indigo-300">Sprint 24 - Oct 1, 2025 to Oct 15, 2025</p>
+          <h1 className="text-4xl font-bold text-white mb-1">
+            Welcome, {user?.username || 'User'}!
+          </h1>
+          <p className="text-indigo-300">
+            {currentSprint ? (
+              `${currentSprint.name} - ${new Date(currentSprint.startDate).toLocaleDateString()} to ${new Date(currentSprint.endDate).toLocaleDateString()}`
+            ) : (
+              'No active sprint'
+            )}
+          </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-          <ProgressCard />
-          <TimeRemainingCard />
-          <SprintRiskCard />
+          <ProgressCard currentSprint={currentSprint} />
+          <TimeRemainingCard currentSprint={currentSprint} />
+          <SprintRiskCard currentSprint={currentSprint} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           <div className="lg:col-span-3">
-            <PredictiveBurndownChart />
+            <PredictiveBurndownChart burndownData={burndownData} />
           </div>
           <div className="lg:col-span-2">
-            <AIRecommendations />
+            <AIRecommendations recommendations={aiRecommendations} />
           </div>
         </div>
       </div>

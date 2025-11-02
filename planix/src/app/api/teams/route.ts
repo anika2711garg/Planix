@@ -1,12 +1,19 @@
 import { NextResponse } from 'next/server';
 import * as teamService from '@/services/teamService';
+import { handleCors, handleOptions } from '@/lib/cors';
+
+export async function OPTIONS() {
+  return handleOptions();
+}
 
 export async function GET() {
   try {
     const teams = await teamService.getAllTeams();
-    return NextResponse.json(teams);
+    const response = NextResponse.json(teams);
+    return handleCors(response);
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to fetch teams' }, { status: 500 });
+    const response = NextResponse.json({ error: 'Failed to fetch teams' }, { status: 500 });
+    return handleCors(response);
   }
 }
 
