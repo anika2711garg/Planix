@@ -6,17 +6,36 @@ type Priority = "High" | "Medium" | "Low";
 type SortDirection = "ascending" | "descending";
 type SortableKeys = "id" | "title" | "storyPoints" | "priority" | "status";
 
+// Types
 interface BacklogItem {
-  id: string;
+  id: number;
+  type: string;
   title: string;
-  storyPoints: number;
-  priority: Priority;
+  description?: string;
+  storyPoints?: number;
+  ownerId?: number;
+  priority?: number;
   status: string;
+  sprintId?: number;
+  createdAt: string;
+  updatedAt: string;
+  owner?: {
+    id: number;
+    username: string;
+  };
+  sprint?: {
+    id: number;
+    name: string;
+  };
 }
 
-interface SortConfig {
-  key: SortableKeys;
-  direction: SortDirection;
+interface Team {
+  id: number;
+  name: string;
+  members: Array<{
+    id: number;
+    username: string;
+  }>;
 }
 
 // --- INITIAL MOCK DATA ---
@@ -300,8 +319,163 @@ const BacklogManagerPage = () => {
         if (a[sortConfig.key] > b[sortConfig.key]) {
           return sortConfig.direction === "ascending" ? 1 : -1;
         }
-        return 0;
       });
+    });
+    return members;
+  };
+
+  // Event handlers
+  const handleCreateItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const token = localStorage.getItem('auth_token');
+      const response = await fetch('http://localhost:3000/api/backlog', {
+        method: editingItem ? 'PUT' : 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(editingItem ? 
+          { 
+            id: editingItem.id, 
+            ...itemForm, 
+            ownerId: itemForm.ownerId ? parseInt(itemForm.ownerId) : null,
+            sprintId: itemForm.sprintId ? parseInt(itemForm.sprintId) : null
+          } :
+          { 
+            ...itemForm, 
+            ownerId: itemForm.ownerId ? parseInt(itemForm.ownerId) : null,
+            sprintId: itemForm.sprintId ? parseInt(itemForm.sprintId) : null
+          }
+        )
+      });
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: `Backlog item ${editingItem ? 'updated' : 'created'} successfully!` });
+        setShowModal(false);
+        setEditingItem(null);
+        setItemForm({ type: 'story', title: '', description: '', storyPoints: 0, priority: 2, ownerId: '', status: 'todo', sprintId: '' });
+        await fetchBacklogItems();
+        setTimeout(() => setMessage(null), 3000);
+      } else {
+        throw new Error(`Failed to ${editingItem ? 'update' : 'create'} backlog item`);
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: `Failed to ${editingItem ? 'update' : 'create'} backlog item` });
+      setTimeout(() => setMessage(null), 3000);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteItem = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this backlog item?')) return;
+
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('auth_token');
+      const response = await fetch('http://localhost:3000/api/backlog', {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ id })
+      });
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: 'Backlog item deleted successfully!' });
+        await fetchBacklogItems();
+        setTimeout(() => setMessage(null), 3000);
+      } else {
+        throw new Error('Failed to delete backlog item');
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to delete backlog item' });
+      setTimeout(() => setMessage(null), 3000);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // AI Reorder function
+  const handleAIReorder = async () => {
+    setIsReordering(true);
+    console.log('Starting AI Reorder...');
+    try {
+      const token = localStorage.getItem('auth_token');
+      console.log('Token found:', !!token);
+      
+      const requestBody = {
+        criteria: reorderCriteria,
+        sprintId: null, // For product backlog reordering
+        teamCapacity: 50, // Example capacity
+        sprintGoals: [] // Could be added later
+      };
+      console.log('Request body:', requestBody);
+      
+      const response = await fetch('http://localhost:3000/api/ai-reorder', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+      });
+      
+      console.log('Response status:', response.status);
+      console.log('Response ok:', response.ok);
+
+      if (response.ok) {
+        const data = await response.json();
+        setReorderResult(data.result);
+        setMessage({ 
+          type: 'success', 
+          text: `AI reordered ${data.result.reorderedItems.length} items with ${data.result.confidence}% confidence!`
+        });
+        await fetchBacklogItems(); // Refresh the list
+        setTimeout(() => setMessage(null), 5000);
+      } else {
+        const errorData = await response.text();
+        console.error('AI Reorder API Error:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData
+        });
+        throw new Error(`API Error: ${response.status} - ${errorData}`);
+      }
+    } catch (error) {
+      console.error('AI Reorder Error Details:', error);
+      setMessage({ 
+        type: 'error', 
+        text: `Failed to reorder: ${error instanceof Error ? error.message : 'Unknown error'}` 
+      });
+      setTimeout(() => setMessage(null), 5000);
+    } finally {
+      setIsReordering(false);
+      setShowReorderModal(false);
+    }
+  };
+
+  // Filter backlog items
+  const filteredItems = backlogItems.filter(item => {
+    const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         item.description?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesType = filterType === 'all' || item.type === filterType;
+    const matchesPriority = filterPriority === 'all' || item.priority?.toString() === filterPriority;
+    
+    return matchesSearch && matchesType && matchesPriority;
+  });
+
+  // Priority color mapping
+  const getPriorityColor = (priority?: number) => {
+    switch (priority) {
+      case 1: return 'text-green-600 bg-green-100';
+      case 2: return 'text-yellow-600 bg-yellow-100';
+      case 3: return 'text-red-600 bg-red-100';
+      default: return 'text-gray-600 bg-gray-100';
     }
     return sortableItems;
   }, [backlogItems, sortConfig]);
@@ -316,7 +490,6 @@ const [loading, setLoading] = useState(false);
     ) {
       direction = "descending";
     }
-    setSortConfig({ key, direction });
   };
 
   const handleAddItem = (item: Omit<BacklogItem, "id" | "status">) => {
@@ -352,6 +525,13 @@ const handleAiReorder = async () => {
   }
 };
 
+  // Initialize data
+  useEffect(() => {
+    fetchBacklogItems();
+    fetchTeams();
+    fetchSprints();
+  }, []);
+
   return (
     <>
       <div className="relative min-h-screen w-full overflow-y-auto bg-slate-900 p-4 sm:p-6 md:p-8 text-white">
@@ -377,6 +557,7 @@ const handleAiReorder = async () => {
               Add New Item
             </button>
           </div>
+        </div>
 
           <div className="bg-black/30 backdrop-blur-lg rounded-2xl border border-white/10 shadow-lg overflow-hidden">
             <div className="overflow-x-auto">
@@ -461,6 +642,43 @@ const handleAiReorder = async () => {
               </table>
             </div>
           </div>
+        )}
+
+        {/* AI Reorder Modal */}
+        {showReorderModal && (
+          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+            <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+              <div className="mt-3">
+                <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                  <Sparkles className="w-5 h-5 mr-2 text-purple-600" />
+                  AI Backlog Reorder
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Let AI intelligently reorder your backlog items based on priority, complexity, and dependencies.
+                </p>
+                
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Reorder Criteria
+                    </label>
+                    <select
+                      value={reorderCriteria}
+                      onChange={(e) => setReorderCriteria(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-purple-500 focus:border-purple-500"
+                    >
+                      <option value="priority">Priority Based</option>
+                      <option value="complexity">Complexity (Simple First)</option>
+                      <option value="dependencies">Dependency Analysis</option>
+                      <option value="sprint_readiness">Sprint Readiness</option>
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {reorderCriteria === 'priority' && 'Order by business priority and quick wins'}
+                      {reorderCriteria === 'complexity' && 'Prioritize simpler items for momentum'}
+                      {reorderCriteria === 'dependencies' && 'Minimize dependency blockers'}
+                      {reorderCriteria === 'sprint_readiness' && 'Focus on well-defined items'}
+                    </p>
+                  </div>
 
           <div className="mt-8 flex justify-center">
             <div className="mt-8 flex justify-center">
@@ -478,7 +696,7 @@ const handleAiReorder = async () => {
 </div>
 
           </div>
-        </div>
+        )}
       </div>
       <AddItemModal
         isOpen={isModalOpen}

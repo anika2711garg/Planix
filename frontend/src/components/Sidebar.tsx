@@ -1,10 +1,9 @@
-"use client";
-
 import { useState } from 'react';
 // FIX: Import the 'LucideIcon' type from the library.
 // ADD: Import 'useNavigate' for redirection and 'LogOut' icon.
-import { LayoutDashboard, ListTodo, Calendar, TrendingUp, FileText, Settings, ChevronsLeft, ChevronsRight, BrainCircuit, LogOut, type LucideIcon } from 'lucide-react';
+import { LayoutDashboard, ListTodo, Calendar, TrendingUp, FileText, Settings, ChevronsLeft, ChevronsRight, BrainCircuit, LogOut, Users, UserCheck, Bell, TestTube, type LucideIcon } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 // --- TYPE & DATA CONFIGURATION ---
 interface NavItemData {
@@ -18,9 +17,13 @@ const navItems: NavItemData[] = [
   { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { path: '/backlog', icon: ListTodo, label: 'Backlog' },
   { path: '/sprint-planner', icon: Calendar, label: 'Sprint Planner' },
+  { path: '/teams', icon: Users, label: 'Teams' },
+  { path: '/team-management', icon: UserCheck, label: 'Team Management' },
+  { path: '/users', icon: UserCheck, label: 'Users' },
+  
   { path: '/performance', icon: TrendingUp, label: 'Performance' },
   { path: '/reports', icon: FileText, label: 'Reports' },
-  { path: '/settings', icon: Settings, label: 'Settings' },
+ 
 ];
 
 // --- COMPONENT: NavItem ---
@@ -54,11 +57,12 @@ const Sidebar = () => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   // ADD: Initialize navigate for programmatic routing
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
   // ADD: Handler for logout action
   const handleLogout = () => {
-    // In a real app, you'd also clear auth tokens, user state, etc.
-    navigate('/login');
+    logout();
+    navigate('/auth');
   };
 
   return (
@@ -90,14 +94,14 @@ const Sidebar = () => {
       <div className="p-4 border-t border-slate-700/50">
         <div className="flex items-center gap-3 mb-4">
           <img 
-            src={`https://placehold.co/40x40/818cf8/ffffff?text=A`} 
+            src={`https://placehold.co/40x40/818cf8/ffffff?text=${user?.username?.charAt(0)?.toUpperCase() || 'U'}`} 
             alt="User Avatar" 
             className="rounded-full flex-shrink-0"
             onError={(e) => { e.currentTarget.src = 'https://placehold.co/40x40/334155/ffffff?text=U'; }}
           />
           <div className={`overflow-hidden transition-all duration-300 ${isCollapsed ? 'w-0 opacity-0' : 'w-full opacity-100'}`}>
-            <p className="text-sm font-semibold text-white whitespace-nowrap">Anika Garg</p>
-            <p className="text-xs text-gray-400 whitespace-nowrap">Admin</p>
+            <p className="text-sm font-semibold text-white whitespace-nowrap">{user?.username || 'User'}</p>
+            <p className="text-xs text-gray-400 whitespace-nowrap capitalize">{user?.role || 'Role'}</p>
           </div>
         </div>
         

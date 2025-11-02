@@ -24,6 +24,7 @@ model User {
   id        Int      @id @default(autoincrement())
   username  String   @unique
   email     String   @unique
+  password  String?  // Added password field for authentication
   role      UserRole @default(developer)
   teamId    Int?
   team      Team?    @relation(fields: [teamId], references: [id])

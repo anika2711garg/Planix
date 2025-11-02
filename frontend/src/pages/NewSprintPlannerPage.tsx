@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { PlusCircle, Edit, Calendar, Users, Target, Clock } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Calendar, Users, Target, Clock, ChevronRight, ChevronLeft } from 'lucide-react';
 
 // Type definitions
 interface User {
@@ -46,11 +46,10 @@ interface Column {
 
 const SprintPlannerPage: React.FC = () => {
   const { user } = useAuth();
-  
-  // State management
   const [sprints, setSprints] = useState<Sprint[]>([]);
   const [currentSprint, setCurrentSprint] = useState<Sprint | null>(null);
   const [teams, setTeams] = useState<Team[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [columns, setColumns] = useState<Record<string, Column>>({
     todo: { id: 'todo', title: 'To Do', tasks: [] },
     inProgress: { id: 'inProgress', title: 'In Progress', tasks: [] },
@@ -60,6 +59,7 @@ const SprintPlannerPage: React.FC = () => {
   // Modal states
   const [showSprintModal, setShowSprintModal] = useState(false);
   const [showTaskModal, setShowTaskModal] = useState(false);
+  const [editingSprint, setEditingSprint] = useState<Sprint | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   
   // Form states
@@ -83,7 +83,7 @@ const SprintPlannerPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
 
-  // API Functions
+  // Fetch data functions
   const fetchTeams = async () => {
     try {
       const token = localStorage.getItem('auth_token');
@@ -137,6 +137,7 @@ const SprintPlannerPage: React.FC = () => {
 
       if (response.ok) {
         const data = await response.json();
+        setTasks(data || []);
         
         // Organize tasks by status
         const newColumns = {
@@ -162,50 +163,25 @@ const SprintPlannerPage: React.FC = () => {
     }
   };
 
-  // Task Status Management
-  const updateTaskStatus = async (taskId: number, newStatus: string) => {
-    setLoading(true);
+  const fetchAvailableUsers = async () => {
     try {
-      const response = await fetch(`http://localhost:3000/api/sprint-tasks`, {
-        method: 'PUT',
+      const token = localStorage.getItem('auth_token');
+      const response = await fetch('http://localhost:3000/api/available-users', {
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        },
-        body: JSON.stringify({ id: taskId, status: newStatus })
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
       });
 
       if (response.ok) {
-        await fetchSprintTasks(currentSprint!.id);
-        setMessage({ type: 'success', text: 'Task status updated successfully!' });
-        setTimeout(() => setMessage(null), 3000);
-      } else {
-        throw new Error('Failed to update task status');
+        // Available users fetched successfully 
       }
     } catch (error) {
-      setMessage({ type: 'error', text: 'Failed to update task status' });
-      setTimeout(() => setMessage(null), 3000);
-    } finally {
-      setLoading(false);
+      console.error('Error fetching available users:', error);
     }
   };
 
-  // Drag and Drop Handlers
-  const handleDragStart = (e: React.DragEvent, taskId: number) => {
-    e.dataTransfer.setData('text/plain', taskId.toString());
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  const handleDrop = (e: React.DragEvent, status: string) => {
-    e.preventDefault();
-    const taskId = parseInt(e.dataTransfer.getData('text/plain'));
-    updateTaskStatus(taskId, status);
-  };
-
-  // Event Handlers
+  // Sprint management functions
   const handleCreateSprint = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -244,6 +220,7 @@ const SprintPlannerPage: React.FC = () => {
     }
   };
 
+  // Task management functions
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentSprint) return;
@@ -284,11 +261,58 @@ const SprintPlannerPage: React.FC = () => {
     }
   };
 
+  const handleUpdateTaskStatus = async (taskId: number, newStatus: string) => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      const response = await fetch('http://localhost:3000/api/sprint-tasks', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          id: taskId,
+          status: newStatus
+        })
+      });
+
+      if (response.ok && currentSprint) {
+        fetchSprintTasks(currentSprint.id);
+      }
+    } catch (error) {
+      console.error('Error updating task status:', error);
+    }
+  };
+
+  const handleDeleteTask = async (taskId: number) => {
+    if (!confirm('Are you sure you want to delete this task?')) return;
+
+    try {
+      const token = localStorage.getItem('auth_token');
+      const response = await fetch('http://localhost:3000/api/sprint-tasks', {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ id: taskId })
+      });
+
+      if (response.ok && currentSprint) {
+        setMessage({ type: 'success', text: 'Task deleted successfully!' });
+        fetchSprintTasks(currentSprint.id);
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error deleting task' });
+    }
+  };
+
   // Initialize data
   useEffect(() => {
     if (user) {
       fetchTeams();
       fetchSprints();
+      fetchAvailableUsers();
     }
   }, [user]);
 
@@ -304,11 +328,6 @@ const SprintPlannerPage: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [message]);
-
-  // Debug effect for modal state
-  useEffect(() => {
-    console.log('showTaskModal changed:', showTaskModal);
-  }, [showTaskModal]);
 
   if (!user) {
     return (
@@ -355,20 +374,15 @@ const SprintPlannerPage: React.FC = () => {
                   <PlusCircle className="w-4 h-4 mr-2" />
                   New Sprint
                 </button>
-                {/* {currentSprint && (
+                {currentSprint && (
                   <button
-                    onClick={() => {
-                      console.log('Add Task button clicked');
-                      console.log('Current Sprint:', currentSprint);
-                      setShowTaskModal(true);
-                      console.log('Modal state set to true');
-                    }}
+                    onClick={() => setShowTaskModal(true)}
                     className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700"
                   >
                     <PlusCircle className="w-4 h-4 mr-2" />
                     Add Task
                   </button>
-                )} */}
+                )}
               </div>
             </div>
           </div>
@@ -411,16 +425,11 @@ const SprintPlannerPage: React.FC = () => {
           </div>
         )}
 
-        {/* Sprint Board or Empty State */}
+        {/* Sprint Board */}
         {currentSprint ? (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {Object.values(columns).map((column) => (
-              <div 
-                key={column.id} 
-                className="bg-white rounded-lg shadow"
-                onDragOver={handleDragOver}
-                onDrop={(e) => handleDrop(e, column.id)}
-              >
+              <div key={column.id} className="bg-white rounded-lg shadow">
                 <div className="px-6 py-4 border-b border-gray-200">
                   <h3 className="text-lg font-medium text-gray-900">
                     {column.title} ({column.tasks.length})
@@ -430,9 +439,7 @@ const SprintPlannerPage: React.FC = () => {
                   {column.tasks.map((task) => (
                     <div
                       key={task.id}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, task.id)}
-                      className="p-4 bg-white border rounded-lg shadow-sm hover:shadow-md transition-shadow cursor-move"
+                      className="p-4 bg-white border rounded-lg shadow-sm hover:shadow-md transition-shadow"
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
@@ -462,6 +469,39 @@ const SprintPlannerPage: React.FC = () => {
                               {task.priority >= 3 ? 'High' : task.priority >= 2 ? 'Medium' : 'Low'}
                             </span>
                           </div>
+                          
+                          {/* Task Status Controls */}
+                          <div className="flex items-center space-x-2 mb-2">
+                            {task.status !== 'todo' && (
+                              <button
+                                onClick={() => handleUpdateTaskStatus(task.id, 'todo')}
+                                className="inline-flex items-center px-2 py-1 text-xs font-medium text-gray-700 bg-gray-100 rounded hover:bg-gray-200"
+                              >
+                                <ChevronLeft className="w-3 h-3 mr-1" />
+                                To Do
+                              </button>
+                            )}
+                            {task.status !== 'inProgress' && (
+                              <button
+                                onClick={() => handleUpdateTaskStatus(task.id, 'inProgress')}
+                                className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-700 bg-blue-100 rounded hover:bg-blue-200"
+                              >
+                                {task.status === 'todo' ? (
+                                  <>Start <ChevronRight className="w-3 h-3 ml-1" /></>
+                                ) : (
+                                  <>In Progress</>
+                                )}
+                              </button>
+                            )}
+                            {task.status !== 'done' && (
+                              <button
+                                onClick={() => handleUpdateTaskStatus(task.id, 'done')}
+                                className="inline-flex items-center px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded hover:bg-green-200"
+                              >
+                                Complete <ChevronRight className="w-3 h-3 ml-1" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                         <div className="flex space-x-1 ml-2">
                           <button
@@ -480,6 +520,12 @@ const SprintPlannerPage: React.FC = () => {
                             className="p-1 text-gray-400 hover:text-blue-600"
                           >
                             <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteTask(task.id)}
+                            className="p-1 text-gray-400 hover:text-red-600"
+                          >
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       </div>
@@ -521,7 +567,7 @@ const SprintPlannerPage: React.FC = () => {
             <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
               <div className="mt-3">
                 <h3 className="text-lg font-medium text-gray-900 mb-4">
-                  Create New Sprint
+                  {editingSprint ? 'Edit Sprint' : 'Create New Sprint'}
                 </h3>
                 <form onSubmit={handleCreateSprint} className="space-y-4">
                   <div>
@@ -597,6 +643,7 @@ const SprintPlannerPage: React.FC = () => {
                       type="button"
                       onClick={() => {
                         setShowSprintModal(false);
+                        setEditingSprint(null);
                         setSprintForm({ name: '', goals: '', startDate: '', endDate: '', teamId: '' });
                       }}
                       className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
@@ -687,11 +734,11 @@ const SprintPlannerPage: React.FC = () => {
                       className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     >
                       <option value="">Unassigned</option>
-                      {currentSprint?.team?.members?.map((member) => (
+                      {currentSprint?.team.members.map((member) => (
                         <option key={member.id} value={member.id}>
                           {member.username}
                         </option>
-                      )) || []}
+                      ))}
                     </select>
                   </div>
                   <div>

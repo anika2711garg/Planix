@@ -1,12 +1,19 @@
 import { NextResponse } from 'next/server';
 import * as notificationService from '@/services/notificationService';
+import { handleCors, handleOptions } from '@/lib/cors';
+
+export async function OPTIONS() {
+  return handleOptions();
+}
 
 export async function GET() {
   try {
     const notifications = await notificationService.getAllNotifications();
-    return NextResponse.json(notifications);
+    const response = NextResponse.json(notifications);
+    return handleCors(response);
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to fetch notifications' }, { status: 500 });
+    const response = NextResponse.json({ error: 'Failed to fetch notifications' }, { status: 500 });
+    return handleCors(response);
   }
 }
 
