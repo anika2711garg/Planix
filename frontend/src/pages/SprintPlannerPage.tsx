@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { PlusCircle, Edit, Calendar, Users, Target, Clock } from 'lucide-react';
+import RLRecommendations from '../components/RLRecommendations';
+import { RLPrediction, getRLPrediction } from '../services/rlPlanningApi';
 
 // Type definitions
 interface User {
@@ -48,6 +50,40 @@ const SprintPlannerPage: React.FC = () => {
   const { user } = useAuth();
   
   // State management
+  const [rlPrediction, setRlPrediction] = useState<RLPrediction>();
+  const [isLoadingPrediction, setIsLoadingPrediction] = useState(false);
+
+  // Get RL predictions when tasks change
+  const fetchRLPredictions = async (tasks: Task[]) => {
+    setIsLoadingPrediction(true);
+    try {
+      const { data, error } = await getRLPrediction({
+        backlogItems: tasks,
+        teamCapacity: sprint?.team?.members.length ? sprint.team.members.length * 10 : 40, // Estimate 10 story points per team member
+        sprintGoals: sprint?.goals ? [sprint.goals] : [],
+        currentVelocity: 30, // TODO: Calculate from historical data
+      });
+
+      if (error) {
+        console.error('Error getting RL predictions:', error);
+        return;
+      }
+
+      setRlPrediction(data);
+    } catch (error) {
+      console.error('Error getting RL predictions:', error);
+    } finally {
+      setIsLoadingPrediction(false);
+    }
+  };
+
+  // Apply RL recommendations
+  const handleApplyRecommendations = (reorderedItems: Task[]) => {
+    // Update your tasks state with the reordered items
+    // This depends on how you're managing state in your app
+    // For example:
+    // setTasks(reorderedItems);
+  };
   const [sprints, setSprints] = useState<Sprint[]>([]);
   const [currentSprint, setCurrentSprint] = useState<Sprint | null>(null);
   const [teams, setTeams] = useState<Team[]>([]);

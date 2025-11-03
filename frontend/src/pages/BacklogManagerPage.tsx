@@ -1,44 +1,34 @@
-import { useState, useMemo } from "react";
-import { Plus, Wand2, ChevronDown, ChevronUp, X } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { Plus, Wand2, ChevronDown, ChevronUp, X, Sparkles } from "lucide-react";
 
 // --- TYPE DEFINITIONS ---
 type Priority = "High" | "Medium" | "Low";
 type SortDirection = "ascending" | "descending";
 type SortableKeys = "id" | "title" | "storyPoints" | "priority" | "status";
 
-// Types
+interface SortConfig {
+  key: SortableKeys;
+  direction: SortDirection;
+}
+
+interface MessageState {
+  type: 'success' | 'error';
+  text: string;
+}
+
 interface BacklogItem {
-  id: number;
-  type: string;
+  id: string;
   title: string;
   description?: string;
   storyPoints?: number;
-  ownerId?: number;
-  priority?: number;
+  priority: Priority;
   status: string;
-  sprintId?: number;
-  createdAt: string;
-  updatedAt: string;
-  owner?: {
-    id: number;
-    username: string;
-  };
-  sprint?: {
-    id: number;
-    name: string;
-  };
+  type?: string;
+  ownerId?: string;
+  sprintId?: string;
 }
 
-interface Team {
-  id: number;
-  name: string;
-  members: Array<{
-    id: number;
-    username: string;
-  }>;
-}
-
-// --- INITIAL MOCK DATA ---
+// Initial mock data with corrected types
 const initialBacklogData: BacklogItem[] = [
   {
     id: "TASK-101",
@@ -74,46 +64,11 @@ const initialBacklogData: BacklogItem[] = [
     storyPoints: 8,
     priority: "High",
     status: "In Refinement",
-  },
-  {
-    id: "TASK-106",
-    title: "Build analytics dashboard",
-    storyPoints: 13,
-    priority: "Medium",
-    status: "To Do",
-  },
-  {
-    id: "TASK-107",
-    title: "Create admin panel",
-    storyPoints: 21,
-    priority: "High",
-    status: "Blocked",
-  },
-  {
-    id: "TASK-108",
-    title: "Implement file upload feature",
-    storyPoints: 8,
-    priority: "Medium",
-    status: "Done",
-  },
-  {
-    id: "TASK-109",
-    title: "Add multi-language support",
-    storyPoints: 13,
-    priority: "Low",
-    status: "In Refinement",
-  },
-  {
-    id: "TASK-110",
-    title: "Setup monitoring and logging",
-    storyPoints: 5,
-    priority: "Medium",
-    status: "To Do",
-  },
+  }
 ];
 
-// --- HELPER FUNCTIONS ---
-const getPriorityClasses = (priority: Priority) => {
+// Helper functions
+const getPriorityClasses = (priority: Priority): string => {
   switch (priority) {
     case "High":
       return "text-red-400 bg-red-500/10 border-red-500/30";
@@ -126,7 +81,7 @@ const getPriorityClasses = (priority: Priority) => {
   }
 };
 
-const getStatusClasses = (status: string) => {
+const getStatusClasses = (status: string): string => {
   switch (status) {
     case "Done":
       return "text-green-400 bg-green-500/10";
@@ -139,18 +94,13 @@ const getStatusClasses = (status: string) => {
   }
 };
 
-// --- HEADER COMPONENT FOR THE TABLE ---
-const SortableHeader = ({
-  sortKey,
-  children,
-  sortConfig,
-  requestSort,
-}: {
+// Header Component
+const SortableHeader: React.FC<{
   sortKey: SortableKeys;
   children: React.ReactNode;
-  sortConfig: SortConfig | null;
+  sortConfig: SortConfig;
   requestSort: (key: SortableKeys) => void;
-}) => {
+}> = ({ sortKey, children, sortConfig, requestSort }) => {
   const isSorted = sortConfig?.key === sortKey;
   const icon = isSorted ? (
     sortConfig?.direction === "ascending" ? (
@@ -174,16 +124,12 @@ const SortableHeader = ({
   );
 };
 
-// --- "ADD ITEM" MODAL COMPONENT ---
-const AddItemModal = ({
-  isOpen,
-  onClose,
-  onAddItem,
-}: {
+// Add Item Modal Component
+const AddItemModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
   onAddItem: (item: Omit<BacklogItem, "id" | "status">) => void;
-}) => {
+}> = ({ isOpen, onClose, onAddItem }) => {
   const [title, setTitle] = useState("");
   const [storyPoints, setStoryPoints] = useState<number | "">("");
   const [priority, setPriority] = useState<Priority>("Medium");
@@ -215,15 +161,10 @@ const AddItemModal = ({
         >
           <X size={24} />
         </button>
-        <h2 className="text-2xl font-bold text-white mb-6">
-          Add New Backlog Item
-        </h2>
+        <h2 className="text-2xl font-bold text-white mb-6">Add New Backlog Item</h2>
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label
-              htmlFor="title"
-              className="block text-sm font-medium text-gray-300 mb-2"
-            >
+            <label htmlFor="title" className="block text-sm font-medium text-gray-300 mb-2">
               Title
             </label>
             <input
@@ -238,10 +179,7 @@ const AddItemModal = ({
           </div>
           <div className="flex gap-6">
             <div className="flex-1">
-              <label
-                htmlFor="storyPoints"
-                className="block text-sm font-medium text-gray-300 mb-2"
-              >
+              <label htmlFor="storyPoints" className="block text-sm font-medium text-gray-300 mb-2">
                 Story Points
               </label>
               <input
@@ -249,9 +187,7 @@ const AddItemModal = ({
                 type="number"
                 value={storyPoints}
                 onChange={(e) =>
-                  setStoryPoints(
-                    e.target.value === "" ? "" : parseInt(e.target.value, 10)
-                  )
+                  setStoryPoints(e.target.value === "" ? "" : parseInt(e.target.value, 10))
                 }
                 className="w-full pl-4 pr-4 py-3 bg-transparent border-b-2 border-gray-600 text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 transition-colors"
                 placeholder="e.g., 8"
@@ -260,10 +196,7 @@ const AddItemModal = ({
               />
             </div>
             <div className="flex-1">
-              <label
-                htmlFor="priority"
-                className="block text-sm font-medium text-gray-300 mb-2"
-              >
+              <label htmlFor="priority" className="block text-sm font-medium text-gray-300 mb-2">
                 Priority
               </label>
               <select
@@ -272,9 +205,9 @@ const AddItemModal = ({
                 onChange={(e) => setPriority(e.target.value as Priority)}
                 className="w-full pl-4 pr-4 py-3 bg-slate-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
-                <option>High</option>
-                <option>Medium</option>
-                <option>Low</option>
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
               </select>
             </div>
           </div>
@@ -299,197 +232,55 @@ const AddItemModal = ({
   );
 };
 
-// --- MAIN PAGE COMPONENT ---
-const BacklogManagerPage = () => {
-  const [backlogItems, setBacklogItems] =
-    useState<BacklogItem[]>(initialBacklogData);
+// Main Component
+const BacklogManagerPage: React.FC = () => {
+  // State declarations
+  const [backlogItems, setBacklogItems] = useState<BacklogItem[]>(initialBacklogData);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [sortConfig, setSortConfig] = useState<SortConfig | null>({
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<MessageState | null>(null);
+  const [showReorderModal, setShowReorderModal] = useState(false);
+  const [reorderCriteria, setReorderCriteria] = useState('priority');
+  const [sortConfig, setSortConfig] = useState<SortConfig>({
     key: "priority",
     direction: "ascending",
   });
 
+  // Sort items
   const sortedItems = useMemo(() => {
     const sortableItems = [...backlogItems];
-    if (sortConfig !== null) {
-      sortableItems.sort((a, b) => {
-        if (a[sortConfig.key] < b[sortConfig.key]) {
+    sortableItems.sort((a, b) => {
+      const aValue = a[sortConfig.key];
+      const bValue = b[sortConfig.key];
+      
+      if (!aValue || !bValue) return 0;
+      
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        const comparison = aValue.localeCompare(bValue);
+        return sortConfig.direction === "ascending" ? comparison : -comparison;
+      }
+      
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        if (aValue < bValue) {
           return sortConfig.direction === "ascending" ? -1 : 1;
         }
-        if (a[sortConfig.key] > b[sortConfig.key]) {
+        if (aValue > bValue) {
           return sortConfig.direction === "ascending" ? 1 : -1;
         }
-      });
+      }
+      
+      return 0;
     });
-    return members;
-  };
-
-  // Event handlers
-  const handleCreateItem = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-
-    try {
-      const token = localStorage.getItem('auth_token');
-      const response = await fetch('http://localhost:3000/api/backlog', {
-        method: editingItem ? 'PUT' : 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(editingItem ? 
-          { 
-            id: editingItem.id, 
-            ...itemForm, 
-            ownerId: itemForm.ownerId ? parseInt(itemForm.ownerId) : null,
-            sprintId: itemForm.sprintId ? parseInt(itemForm.sprintId) : null
-          } :
-          { 
-            ...itemForm, 
-            ownerId: itemForm.ownerId ? parseInt(itemForm.ownerId) : null,
-            sprintId: itemForm.sprintId ? parseInt(itemForm.sprintId) : null
-          }
-        )
-      });
-
-      if (response.ok) {
-        setMessage({ type: 'success', text: `Backlog item ${editingItem ? 'updated' : 'created'} successfully!` });
-        setShowModal(false);
-        setEditingItem(null);
-        setItemForm({ type: 'story', title: '', description: '', storyPoints: 0, priority: 2, ownerId: '', status: 'todo', sprintId: '' });
-        await fetchBacklogItems();
-        setTimeout(() => setMessage(null), 3000);
-      } else {
-        throw new Error(`Failed to ${editingItem ? 'update' : 'create'} backlog item`);
-      }
-    } catch (error) {
-      setMessage({ type: 'error', text: `Failed to ${editingItem ? 'update' : 'create'} backlog item` });
-      setTimeout(() => setMessage(null), 3000);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDeleteItem = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this backlog item?')) return;
-
-    setLoading(true);
-    try {
-      const token = localStorage.getItem('auth_token');
-      const response = await fetch('http://localhost:3000/api/backlog', {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ id })
-      });
-
-      if (response.ok) {
-        setMessage({ type: 'success', text: 'Backlog item deleted successfully!' });
-        await fetchBacklogItems();
-        setTimeout(() => setMessage(null), 3000);
-      } else {
-        throw new Error('Failed to delete backlog item');
-      }
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Failed to delete backlog item' });
-      setTimeout(() => setMessage(null), 3000);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // AI Reorder function
-  const handleAIReorder = async () => {
-    setIsReordering(true);
-    console.log('Starting AI Reorder...');
-    try {
-      const token = localStorage.getItem('auth_token');
-      console.log('Token found:', !!token);
-      
-      const requestBody = {
-        criteria: reorderCriteria,
-        sprintId: null, // For product backlog reordering
-        teamCapacity: 50, // Example capacity
-        sprintGoals: [] // Could be added later
-      };
-      console.log('Request body:', requestBody);
-      
-      const response = await fetch('http://localhost:3000/api/ai-reorder', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-      });
-      
-      console.log('Response status:', response.status);
-      console.log('Response ok:', response.ok);
-
-      if (response.ok) {
-        const data = await response.json();
-        setReorderResult(data.result);
-        setMessage({ 
-          type: 'success', 
-          text: `AI reordered ${data.result.reorderedItems.length} items with ${data.result.confidence}% confidence!`
-        });
-        await fetchBacklogItems(); // Refresh the list
-        setTimeout(() => setMessage(null), 5000);
-      } else {
-        const errorData = await response.text();
-        console.error('AI Reorder API Error:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorData
-        });
-        throw new Error(`API Error: ${response.status} - ${errorData}`);
-      }
-    } catch (error) {
-      console.error('AI Reorder Error Details:', error);
-      setMessage({ 
-        type: 'error', 
-        text: `Failed to reorder: ${error instanceof Error ? error.message : 'Unknown error'}` 
-      });
-      setTimeout(() => setMessage(null), 5000);
-    } finally {
-      setIsReordering(false);
-      setShowReorderModal(false);
-    }
-  };
-
-  // Filter backlog items
-  const filteredItems = backlogItems.filter(item => {
-    const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         item.description?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesType = filterType === 'all' || item.type === filterType;
-    const matchesPriority = filterPriority === 'all' || item.priority?.toString() === filterPriority;
-    
-    return matchesSearch && matchesType && matchesPriority;
-  });
-
-  // Priority color mapping
-  const getPriorityColor = (priority?: number) => {
-    switch (priority) {
-      case 1: return 'text-green-600 bg-green-100';
-      case 2: return 'text-yellow-600 bg-yellow-100';
-      case 3: return 'text-red-600 bg-red-100';
-      default: return 'text-gray-600 bg-gray-100';
-    }
     return sortableItems;
   }, [backlogItems, sortConfig]);
-const [loading, setLoading] = useState(false);
 
+  // Handlers
   const requestSort = (key: SortableKeys) => {
     let direction: SortDirection = "ascending";
-    if (
-      sortConfig &&
-      sortConfig.key === key &&
-      sortConfig.direction === "ascending"
-    ) {
+    if (sortConfig.key === key && sortConfig.direction === "ascending") {
       direction = "descending";
     }
+    setSortConfig({ key, direction });
   };
 
   const handleAddItem = (item: Omit<BacklogItem, "id" | "status">) => {
@@ -498,67 +289,117 @@ const [loading, setLoading] = useState(false);
       status: "To Do",
       ...item,
     };
-    setBacklogItems((currentItems) => [newItem, ...currentItems]);
+    setBacklogItems((current) => [newItem, ...current]);
   };
-const handleAiReorder = async () => {
-  setLoading(true);
-  try {
-    const response = await fetch("/api/ai/reorder", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sprintId: 1 }), // Replace 1 with your real sprint ID if needed
-    });
 
-    const data = await response.json();
+  const handleAiReorder = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch("/api/rl-planning", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sprintId: backlogItems[0]?.sprintId,
+          criteria: reorderCriteria
+        })
+      });
 
-    if (data.success && Array.isArray(data.reordered)) {
-      setBacklogItems(data.reordered);
-      alert("✅ AI Suggested Priority Order Applied!");
-    } else {
-      alert("⚠️ AI Reorder failed: " + (data.error || "Unexpected response"));
+      const data = await response.json();
+      if (response.ok) {
+        setBacklogItems(data.prediction.reorderedItems);
+        
+        // Show AI recommendations
+        const recommendations = data.prediction.recommendations
+          .map((rec: any) => `${rec.title}: ${rec.message}`)
+          .join('\n');
+          
+        setMessage({
+          type: 'success',
+          text: `Successfully reordered items using AI.\n\nRecommendations:\n${recommendations}\n\nConfidence: ${(data.prediction.confidence * 100).toFixed(1)}%\n\nReasoning: ${data.prediction.reasoning}`
+        });
+      } else {
+        throw new Error(data.message || 'Failed to reorder items');
+      }
+    } catch (error) {
+      setMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : 'Failed to reorder items'
+      });
+    } finally {
+      setLoading(false);
+      setShowReorderModal(false);
     }
-  } catch (error) {
-    console.error("Error triggering AI reorder:", error);
-    alert("❌ Something went wrong while reordering tasks.");
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   // Initialize data
   useEffect(() => {
-    fetchBacklogItems();
-    fetchTeams();
-    fetchSprints();
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const response = await fetch("/api/backlog");
+        if (response.ok) {
+          const data = await response.json();
+          setBacklogItems(data);
+        } else {
+          throw new Error('Failed to fetch backlog items');
+        }
+      } catch (error) {
+        setMessage({
+          type: 'error',
+          text: 'Failed to fetch backlog items'
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
   }, []);
 
   return (
-    <>
-      <div className="relative min-h-screen w-full overflow-y-auto bg-slate-900 p-4 sm:p-6 md:p-8 text-white">
+    <div className="min-h-screen bg-slate-900">
+      <div className="relative w-full overflow-y-auto p-4 sm:p-6 md:p-8 text-white">
         {/* Animated Aurora Background */}
-        <div className="absolute top-0 -left-4 w-72 h-72 bg-purple-600 rounded-full mix-blend-screen filter blur-xl opacity-30 animate-blob"></div>
-        <div className="absolute top-0 -right-4 w-72 h-72 bg-indigo-600 rounded-full mix-blend-screen filter blur-xl opacity-30 animate-blob animation-delay-2000"></div>
+        <div className="absolute top-0 -left-4 w-72 h-72 bg-purple-600 rounded-full mix-blend-screen filter blur-xl opacity-30 animate-blob" />
+        <div className="absolute top-0 -right-4 w-72 h-72 bg-indigo-600 rounded-full mix-blend-screen filter blur-xl opacity-30 animate-blob animation-delay-2000" />
 
         <div className="relative z-10">
+          {/* Header Section */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
             <div>
-              <h1 className="text-4xl font-bold text-white mb-1">
-                Product Backlog
-              </h1>
-              <p className="text-indigo-300">
-                Manage, sort, and prioritize all user stories and tasks.
-              </p>
+              <h1 className="text-4xl font-bold text-white mb-1">Product Backlog</h1>
+              <p className="text-indigo-300">Manage, sort, and prioritize all user stories and tasks.</p>
             </div>
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="flex items-center gap-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-600 text-white font-bold px-5 py-3 rounded-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300"
-            >
-              <Plus size={20} />
-              Add New Item
-            </button>
+            <div className="flex gap-4">
+              <button
+                onClick={() => setIsModalOpen(true)}
+                className="flex items-center gap-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-600 text-white font-bold px-5 py-3 rounded-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300"
+              >
+                <Plus size={20} />
+                Add New Item
+              </button>
+              <button
+                onClick={() => setShowReorderModal(true)}
+                disabled={loading}
+                className="flex items-center gap-2 bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-600 hover:to-amber-700 text-white font-bold px-5 py-3 rounded-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 disabled:opacity-50"
+              >
+                <Wand2 size={20} />
+                AI Reorder
+              </button>
+            </div>
           </div>
-        </div>
 
+          {/* Message Display */}
+          {message && (
+            <div
+              className={`mb-4 p-4 rounded-lg ${
+                message.type === 'success' ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
+              }`}
+            >
+              {message.text}
+            </div>
+          )}
+
+          {/* Main Table */}
           <div className="bg-black/30 backdrop-blur-lg rounded-2xl border border-white/10 shadow-lg overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[800px]">
@@ -642,68 +483,78 @@ const handleAiReorder = async () => {
               </table>
             </div>
           </div>
-        )}
-
-        {/* AI Reorder Modal */}
-        {showReorderModal && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-            <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-              <div className="mt-3">
-                <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
-                  <Sparkles className="w-5 h-5 mr-2 text-purple-600" />
-                  AI Backlog Reorder
-                </h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Let AI intelligently reorder your backlog items based on priority, complexity, and dependencies.
-                </p>
-                
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Reorder Criteria
-                    </label>
-                    <select
-                      value={reorderCriteria}
-                      onChange={(e) => setReorderCriteria(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-purple-500 focus:border-purple-500"
-                    >
-                      <option value="priority">Priority Based</option>
-                      <option value="complexity">Complexity (Simple First)</option>
-                      <option value="dependencies">Dependency Analysis</option>
-                      <option value="sprint_readiness">Sprint Readiness</option>
-                    </select>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {reorderCriteria === 'priority' && 'Order by business priority and quick wins'}
-                      {reorderCriteria === 'complexity' && 'Prioritize simpler items for momentum'}
-                      {reorderCriteria === 'dependencies' && 'Minimize dependency blockers'}
-                      {reorderCriteria === 'sprint_readiness' && 'Focus on well-defined items'}
-                    </p>
-                  </div>
-
-          <div className="mt-8 flex justify-center">
-            <div className="mt-8 flex justify-center">
-  <button
-    onClick={handleAiReorder}
-    disabled={loading}
-    className={`flex items-center gap-3 bg-gradient-to-r from-yellow-500 via-orange-500 to-red-500 
-      hover:from-yellow-600 hover:to-red-600 text-white font-bold px-6 py-3 rounded-lg 
-      shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 
-      ${loading ? "opacity-70 cursor-not-allowed" : ""}`}
-  >
-    <Wand2 size={20} />
-    {loading ? "Reordering..." : "Suggest Priority Order (AI)"}
-  </button>
-</div>
-
-          </div>
-        )}
+        </div>
       </div>
+
+      {/* AI Reorder Modal */}
+      {showReorderModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="relative bg-white rounded-xl shadow-xl max-w-md w-full">
+            <button
+              onClick={() => setShowReorderModal(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+            >
+              <X size={24} />
+            </button>
+            <div className="p-6">
+              <h3 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+                <Sparkles className="w-6 h-6 text-amber-500" />
+                AI Backlog Reorder
+              </h3>
+              <p className="mt-2 text-gray-600">
+                Let AI intelligently reorder your backlog items based on your selected criteria.
+              </p>
+              
+              <div className="mt-6">
+                <label className="block text-sm font-medium text-gray-700">
+                  Reorder Criteria
+                </label>
+                <select
+                  value={reorderCriteria}
+                  onChange={(e) => setReorderCriteria(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-gray-300 py-2 px-3 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                >
+                  <option value="priority">Priority Based</option>
+                  <option value="complexity">Complexity (Simple First)</option>
+                  <option value="dependencies">Dependency Analysis</option>
+                  <option value="sprint_readiness">Sprint Readiness</option>
+                </select>
+                <p className="mt-2 text-sm text-gray-500">
+                  {reorderCriteria === 'priority' && 'Order by business priority and quick wins'}
+                  {reorderCriteria === 'complexity' && 'Prioritize simpler items for momentum'}
+                  {reorderCriteria === 'dependencies' && 'Minimize dependency blockers'}
+                  {reorderCriteria === 'sprint_readiness' && 'Focus on well-defined items'}
+                </p>
+              </div>
+
+              <div className="mt-8 flex justify-end gap-3">
+                <button
+                  onClick={() => setShowReorderModal(false)}
+                  className="px-4 py-2 text-gray-700 hover:bg-gray-50 rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAiReorder}
+                  disabled={loading}
+                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-yellow-500 text-white rounded-lg hover:from-amber-600 hover:to-yellow-600 disabled:opacity-50"
+                >
+                  <Wand2 size={18} />
+                  {loading ? "Reordering..." : "Apply AI Reorder"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Item Modal */}
       <AddItemModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onAddItem={handleAddItem}
       />
-    </>
+    </div>
   );
 };
 

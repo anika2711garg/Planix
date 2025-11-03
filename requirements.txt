@@ -1,0 +1,7 @@
+pandas>=1.5
+# For PyTorch, install the appropriate wheel for your platform. Example CPU-only install:
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+# Or for macOS/Apple Silicon (conda recommended) see https://pytorch.org
+
+# If you prefer pip standard (may install CUDA-enabled builds if available):
+# pip install torch torchvision torchaudio

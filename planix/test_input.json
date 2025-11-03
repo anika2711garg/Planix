@@ -1,0 +1,25 @@
+{
+  "backlog_items": [
+    {
+      "id": "PLANIX-1",
+      "title": "Implement user authentication",
+      "story_points": 5,
+      "priority": "High",
+      "type": "Feature",
+      "status": "To Do",
+      "dependencies": []
+    },
+    {
+      "id": "PLANIX-2",
+      "title": "Create dashboard layout",
+      "story_points": 3,
+      "priority": "Medium",
+      "type": "Feature",
+      "status": "To Do",
+      "dependencies": []
+    }
+  ],
+  "team_capacity": 40,
+  "sprint_goals": ["Improve user experience"],
+  "current_velocity": 30
+}
