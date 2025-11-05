@@ -122,15 +122,3 @@ model Notification {
   message   String
   sentAt    DateTime @default(now())
 }
-
-/// SprintSuccessPrediction model for storing AI results
-model SprintSuccessPrediction {
-  id             Int      @id @default(autoincrement())
-  sprintId       Int
-  sprint         Sprint   @relation(fields: [sprintId], references: [id])
-  predictedScore Float
-  confidence     Float?   // Stores the range of the confidence interval (Upper - Lower)
-  generatedAt    DateTime @default(now())
-
-  @@index([sprintId])
-}

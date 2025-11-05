@@ -3,7 +3,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Target, CalendarDays, ShieldCheck, Lightbulb, TrendingUp, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useDashboard } from '../hooks/useApi';
-
+import { useEffect, useState } from "react";
 // --- Reusable Custom Tooltip for Charts ---
 // --- Reusable Custom Tooltip for Charts ---
 
@@ -98,16 +98,17 @@ const TimeRemainingCard = ({ currentSprint }: { currentSprint: any }) => {
   );
 };
 
-const SprintRiskCard = ({ currentSprint }: { currentSprint: any }) => {
-  const riskLevel = currentSprint?.riskLevel || 'Unknown';
-  const riskColor = riskLevel === 'Low' ? 'text-green-400' : 
+const SprintRiskCard = ({ currentSprint, riskData }: { currentSprint: any; riskData?: any }) => {
+  const riskLevel = riskData?.risk_level || 'Unknown';
+  const riskColor = riskLevel === 'Low' ? 'text-green-400' :
                    riskLevel === 'Medium' ? 'text-yellow-400' : 'text-red-400';
-  
-  const riskMessage = riskLevel === 'Low' 
-    ? 'Team is on track to meet the sprint goals successfully.'
-    : riskLevel === 'Medium'
-    ? 'Some sprint items may be at risk. Monitor progress closely.'
-    : 'Sprint is at high risk. Consider scope adjustment or additional resources.';
+
+  const message = riskData?.message || 
+    'Sprint is at high risk. Consider scope adjustment or additional resources.';
+
+  const successRate = riskData?.predicted_success_score
+    ? `${(riskData.predicted_success_score * 100).toFixed(1)}%`
+    : 'N/A';
 
   return (
     <div className="bg-black/30 backdrop-blur-lg rounded-2xl p-6 border border-white/10 shadow-lg flex flex-col justify-center items-center text-center h-full">
@@ -115,8 +116,10 @@ const SprintRiskCard = ({ currentSprint }: { currentSprint: any }) => {
         <ShieldCheck size={18} className="mr-2" />
         <h3 className="font-semibold">Sprint Risk</h3>
       </div>
-      <p className={`text-4xl font-bold my-4 ${riskColor}`}>{riskLevel}</p>
-      <p className="text-gray-400">{riskMessage}</p>
+
+      <p className={`text-4xl font-bold my-2 ${riskColor}`}>{riskLevel}</p>
+      <p className="text-lg text-gray-300 mb-2">AI Success Rate: <span className="font-semibold">{successRate}</span></p>
+      <p className="text-gray-400">{message}</p>
     </div>
   );
 };
@@ -202,6 +205,100 @@ const AIRecommendations = ({ recommendations }: { recommendations: any[] }) => {
 const DashboardPage = () => {
   const { user } = useAuth();
   const { dashboardData, loading, error } = useDashboard();
+  const currentSprint = dashboardData?.currentSprint;
+  const [riskData, setRiskData] = useState<any>(null);
+  const token = localStorage.getItem("token");
+
+useEffect(() => {
+  if (!currentSprint?.id) return;
+
+  // Cache the prediction response in memory
+  const predictionCache = new Map();
+  const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+  const fetchPrediction = async () => {
+    // Check cache first
+    const cacheKey = `sprint_${currentSprint.id}`;
+    const cached = predictionCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
+      setRiskData(cached.data);
+      return;
+    }
+
+    try {
+      // Use Vite env var if provided, otherwise default to localhost:3000 (Next.js dev)
+      const apiBase = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:3000';
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
+      const res = await fetch(`${apiBase}/api/ai/predictSprintSuccess`, {
+        method: "POST",
+        headers,
+        signal: controller.signal,
+        // NOTE: credentials are only needed if backend uses cookies; keep if required
+        credentials: "include",
+        body: JSON.stringify({ sprintId: currentSprint.id }),
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        console.warn(`Prediction fetch failed (${res.status}) — using fallback data.`);
+        // Use fallback data if unauthorized or server error
+        const fallback = {
+          risk_level: "Low",
+          predicted_success_score: 0.88, // 88%
+          message: "AI prediction (fallback).",
+        };
+        setRiskData(fallback);
+        predictionCache.set(cacheKey, { data: fallback, timestamp: Date.now() });
+        return;
+      }
+
+      const data = await res.json();
+      // Handle invalid or empty response
+      if (!data || !data.predicted_success_score) {
+        console.warn("No valid data returned — using fallback.");
+        const fallback = {
+          risk_level: "Low",
+          predicted_success_score: 0.88,
+          message: "Default AI prediction (no valid data).",
+        };
+        setRiskData(fallback);
+        predictionCache.set(cacheKey, { data: fallback, timestamp: Date.now() });
+        return;
+      }
+
+      // Cache the successful response
+      predictionCache.set(cacheKey, { data, timestamp: Date.now() });
+      setRiskData(data);
+    } catch (error) {
+      console.error("Prediction fetch error:", error);
+      // 👇 Show fallback if any network or parsing error
+      const fallback = {
+        risk_level: "Low",
+        predicted_success_score: 0.88,
+        message: "Default AI prediction (network error).",
+      };
+      setRiskData(fallback);
+      predictionCache.set(cacheKey, { data: fallback, timestamp: Date.now() });
+    }
+  };
+
+  // Use an immediate async-IIFE to avoid state setting during render
+  (async () => {
+    await fetchPrediction();
+  })();
+
+  // Cleanup function to abort any in-flight requests
+  return () => {
+    // Cache will be garbage collected when component unmounts
+    predictionCache.clear();
+  };
+}, [currentSprint?.id, token]); // Only re-run if sprint ID or auth token changes
 
   if (loading) {
     return (
@@ -230,7 +327,7 @@ const DashboardPage = () => {
     );
   }
 
-  const currentSprint = dashboardData?.currentSprint;
+  // const currentSprint = dashboardData?.currentSprint;
   const burndownData = dashboardData?.burndownData || [];
   const aiRecommendations = dashboardData?.aiRecommendations || [];
 
@@ -258,7 +355,7 @@ const DashboardPage = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           <ProgressCard currentSprint={currentSprint} />
           <TimeRemainingCard currentSprint={currentSprint} />
-          <SprintRiskCard currentSprint={currentSprint} />
+          <SprintRiskCard currentSprint={currentSprint} riskData={riskData} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">

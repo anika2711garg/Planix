@@ -322,22 +322,28 @@ const SprintPlannerPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="bg-white shadow rounded-lg mb-6">
-          <div className="px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900">Sprint Planner</h1>
-                {currentSprint && (
-                  <div className="mt-2 flex items-center space-x-4 text-sm text-gray-600">
-                    <div className="flex items-center">
-                      <Calendar className="w-4 h-4 mr-1" />
-                      {new Date(currentSprint.startDate).toLocaleDateString()} - {new Date(currentSprint.endDate).toLocaleDateString()}
-                    </div>
-                    <div className="flex items-center">
-                      <Users className="w-4 h-4 mr-1" />
+    <div className="relative min-h-screen w-full overflow-y-auto bg-slate-900 p-4 sm:p-6 md:p-8 text-white">
+      {/* Animated Aurora Background */}
+      <div className="absolute top-0 -left-4 w-72 h-72 bg-purple-600 rounded-full mix-blend-screen filter blur-xl opacity-30 animate-blob"></div>
+      <div className="absolute top-0 -right-4 w-72 h-72 bg-indigo-600 rounded-full mix-blend-screen filter blur-xl opacity-30 animate-blob animation-delay-2000"></div>
+      <div className="absolute -bottom-8 left-20 w-72 h-72 bg-blue-600 rounded-full mix-blend-screen filter blur-xl opacity-30 animate-blob animation-delay-4000"></div>
+      
+      <div className="relative z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Header */}
+          <div className="bg-black/30 backdrop-blur-lg rounded-2xl border border-white/10 shadow-lg mb-6">
+            <div className="px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-3xl font-bold text-white">Sprint Planner</h1>
+                  {currentSprint && (
+                    <div className="mt-2 flex items-center space-x-4 text-sm text-gray-300">
+                      <div className="flex items-center">
+                        <Calendar className="w-4 h-4 mr-1" />
+                        {new Date(currentSprint.startDate).toLocaleDateString()} - {new Date(currentSprint.endDate).toLocaleDateString()}
+                      </div>
+                      <div className="flex items-center">
+                        <Users className="w-4 h-4 mr-1" />
                       Team: {currentSprint.team.name}
                     </div>
                     <div className="flex items-center">
@@ -350,7 +356,7 @@ const SprintPlannerPage: React.FC = () => {
               <div className="flex space-x-3">
                 <button
                   onClick={() => setShowSprintModal(true)}
-                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600/80 hover:bg-blue-600 backdrop-blur-sm"
                 >
                   <PlusCircle className="w-4 h-4 mr-2" />
                   New Sprint
@@ -376,10 +382,10 @@ const SprintPlannerPage: React.FC = () => {
 
         {/* Message Display */}
         {message && (
-          <div className={`mb-6 p-4 rounded-md ${
+          <div className={`mb-6 p-4 rounded-md backdrop-blur-lg border ${
             message.type === 'success' 
-              ? 'bg-green-50 text-green-800 border border-green-200' 
-              : 'bg-red-50 text-red-800 border border-red-200'
+              ? 'bg-green-500/20 text-green-300 border-green-500/30' 
+              : 'bg-red-500/20 text-red-300 border-red-500/30'
           }`}>
             {message.text}
           </div>
@@ -387,9 +393,9 @@ const SprintPlannerPage: React.FC = () => {
 
         {/* Sprint Selection */}
         {sprints.length > 0 && (
-          <div className="bg-white shadow rounded-lg mb-6">
+          <div className="bg-black/30 backdrop-blur-lg rounded-2xl border border-white/10 shadow-lg mb-6">
             <div className="px-6 py-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-300 mb-2">
                 Select Sprint
               </label>
               <select
@@ -398,11 +404,12 @@ const SprintPlannerPage: React.FC = () => {
                   const sprint = sprints.find(s => s.id === parseInt(e.target.value));
                   setCurrentSprint(sprint || null);
                 }}
-                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                className="block w-full px-3 py-2 border border-white/10 rounded-md bg-black text-white shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                style={{ backgroundColor: '#000000', color: '#ffffff' }}
               >
-                <option value="">Select a sprint...</option>
+                <option value="" style={{ backgroundColor: '#000000', color: '#ffffff' }}>Select a sprint...</option>
                 {sprints.map((sprint) => (
-                  <option key={sprint.id} value={sprint.id}>
+                  <option key={sprint.id} value={sprint.id} style={{ backgroundColor: '#000000', color: '#ffffff' }}>
                     {sprint.name} - {sprint.team.name}
                   </option>
                 ))}
@@ -417,12 +424,12 @@ const SprintPlannerPage: React.FC = () => {
             {Object.values(columns).map((column) => (
               <div 
                 key={column.id} 
-                className="bg-white rounded-lg shadow"
+                className="bg-black/30 backdrop-blur-lg rounded-2xl border border-white/10 shadow-lg"
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, column.id)}
               >
-                <div className="px-6 py-4 border-b border-gray-200">
-                  <h3 className="text-lg font-medium text-gray-900">
+                <div className="px-6 py-4 border-b border-white/10">
+                  <h3 className="text-lg font-medium text-white">
                     {column.title} ({column.tasks.length})
                   </h3>
                 </div>
@@ -432,19 +439,19 @@ const SprintPlannerPage: React.FC = () => {
                       key={task.id}
                       draggable
                       onDragStart={(e) => handleDragStart(e, task.id)}
-                      className="p-4 bg-white border rounded-lg shadow-sm hover:shadow-md transition-shadow cursor-move"
+                      className="p-4 bg-white/5 backdrop-blur-sm border border-white/10 rounded-lg hover:bg-white/10 transition-all cursor-move"
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <h4 className="font-medium text-gray-900 mb-2">
+                          <h4 className="font-medium text-white mb-2">
                             {task.title}
                           </h4>
                           {task.description && (
-                            <p className="text-sm text-gray-600 mb-3">
+                            <p className="text-sm text-gray-300 mb-3">
                               {task.description}
                             </p>
                           )}
-                          <div className="flex items-center space-x-4 text-xs text-gray-500 mb-3">
+                          <div className="flex items-center space-x-4 text-xs text-gray-400 mb-3">
                             <span className="inline-flex items-center">
                               <Clock className="w-3 h-3 mr-1" />
                               {task.storyPoints} pts
@@ -477,7 +484,7 @@ const SprintPlannerPage: React.FC = () => {
                               });
                               setShowTaskModal(true);
                             }}
-                            className="p-1 text-gray-400 hover:text-blue-600"
+                            className="p-1 text-gray-400 hover:text-blue-400"
                           >
                             <Edit className="w-4 h-4" />
                           </button>
@@ -490,11 +497,11 @@ const SprintPlannerPage: React.FC = () => {
             ))}
           </div>
         ) : (
-          <div className="bg-white shadow rounded-lg">
+          <div className="bg-black/30 backdrop-blur-lg rounded-2xl border border-white/10 shadow-lg">
             <div className="px-6 py-12 text-center">
-              <Target className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-2 text-sm font-medium text-gray-900">No Sprint Selected</h3>
-              <p className="mt-1 text-sm text-gray-500">
+              <Target className="mx-auto h-12 w-12 text-gray-500" />
+              <h3 className="mt-2 text-sm font-medium text-white">No Sprint Selected</h3>
+              <p className="mt-1 text-sm text-gray-400">
                 {sprints.length === 0 
                   ? "Get started by creating a new sprint."
                   : "Select a sprint from the dropdown above to view tasks."
@@ -504,7 +511,7 @@ const SprintPlannerPage: React.FC = () => {
                 <div className="mt-6">
                   <button
                     onClick={() => setShowSprintModal(true)}
-                    className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                    className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600/80 hover:bg-blue-600 backdrop-blur-sm"
                   >
                     <PlusCircle className="w-4 h-4 mr-2" />
                     Create Sprint
@@ -517,50 +524,51 @@ const SprintPlannerPage: React.FC = () => {
 
         {/* Sprint Modal */}
         {showSprintModal && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-            <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm overflow-y-auto h-full w-full z-50">
+            <div className="relative top-20 mx-auto p-5 border border-white/10 w-96 shadow-lg rounded-2xl bg-black/80 backdrop-blur-lg">
               <div className="mt-3">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">
+                <h3 className="text-lg font-medium text-white mb-4">
                   Create New Sprint
                 </h3>
                 <form onSubmit={handleCreateSprint} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label className="block text-sm font-medium text-gray-300">
                       Sprint Name
                     </label>
                     <input
                       type="text"
                       value={sprintForm.name}
                       onChange={(e) => setSprintForm({...sprintForm, name: e.target.value})}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      className="mt-1 block w-full px-3 py-2 border border-white/10 rounded-md bg-white/5 backdrop-blur-sm text-white placeholder-gray-400 shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                       required
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label className="block text-sm font-medium text-gray-300">
                       Goals
                     </label>
                     <textarea
                       value={sprintForm.goals}
                       onChange={(e) => setSprintForm({...sprintForm, goals: e.target.value})}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      className="mt-1 block w-full px-3 py-2 border border-white/10 rounded-md bg-white/5 backdrop-blur-sm text-white placeholder-gray-400 shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                       rows={3}
                       required
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label className="block text-sm font-medium text-gray-300">
                       Team
                     </label>
                     <select
                       value={sprintForm.teamId}
                       onChange={(e) => setSprintForm({...sprintForm, teamId: e.target.value})}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      className="mt-1 block w-full px-3 py-2 border border-white/10 rounded-md bg-black text-white shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      style={{ backgroundColor: '#000000', color: '#ffffff' }}
                       required
                     >
-                      <option value="">Select a team...</option>
+                      <option value="" style={{ backgroundColor: '#000000', color: '#ffffff' }}>Select a team...</option>
                       {teams.map((team) => (
-                        <option key={team.id} value={team.id}>
+                        <option key={team.id} value={team.id} style={{ backgroundColor: '#000000', color: '#ffffff' }}>
                           {team.name}
                         </option>
                       ))}
@@ -568,26 +576,26 @@ const SprintPlannerPage: React.FC = () => {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">
+                      <label className="block text-sm font-medium text-gray-300">
                         Start Date
                       </label>
                       <input
                         type="date"
                         value={sprintForm.startDate}
                         onChange={(e) => setSprintForm({...sprintForm, startDate: e.target.value})}
-                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                        className="mt-1 block w-full px-3 py-2 border border-white/10 rounded-md bg-white/5 backdrop-blur-sm text-white shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                         required
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">
+                      <label className="block text-sm font-medium text-gray-300">
                         End Date
                       </label>
                       <input
                         type="date"
                         value={sprintForm.endDate}
                         onChange={(e) => setSprintForm({...sprintForm, endDate: e.target.value})}
-                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                        className="mt-1 block w-full px-3 py-2 border border-white/10 rounded-md bg-white/5 backdrop-blur-sm text-white shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                         required
                       />
                     </div>
@@ -599,14 +607,14 @@ const SprintPlannerPage: React.FC = () => {
                         setShowSprintModal(false);
                         setSprintForm({ name: '', goals: '', startDate: '', endDate: '', teamId: '' });
                       }}
-                      className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                      className="px-4 py-2 border border-white/10 rounded-md text-sm font-medium text-gray-300 hover:bg-white/5 backdrop-blur-sm"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
                       disabled={loading}
-                      className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+                      className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600/80 hover:bg-blue-600 backdrop-blur-sm disabled:opacity-50"
                     >
                       {loading ? 'Creating...' : 'Create Sprint'}
                     </button>
@@ -734,6 +742,7 @@ const SprintPlannerPage: React.FC = () => {
             </div>
           </div>
         )}
+      </div>
       </div>
     </div>
   );
