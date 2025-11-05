@@ -1,10 +1,29 @@
-import React from 'react';
+import React, { useEffect, useState, FC } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Target, CalendarDays, ShieldCheck, Lightbulb, TrendingUp, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useDashboard } from '../hooks/useApi';
-import { useEffect, useState } from "react";
-// --- Reusable Custom Tooltip for Charts ---
+
+// Types
+interface ChartPoint {
+  day: number;
+  ideal: number | null;
+  actual: number | null;
+  predicted: number | null;
+}
+
+interface SprintData {
+  id: number;
+  startDate: string;
+  endDate: string;
+  items: any[];
+  // Add other fields as needed
+}
+
+interface BurndownChartProps {
+  currentSprint: SprintData | null;
+}
+
 // --- Reusable Custom Tooltip for Charts ---
 
 // Define a specific type for the objects inside the 'payload' array
@@ -127,37 +146,99 @@ const SprintRiskCard = ({ currentSprint, riskData }: { currentSprint: any; riskD
 
 // --- CHART & RECOMMENDATIONS COMPONENTS ---
 
-const PredictiveBurndownChart = ({ burndownData }: { burndownData: any[] }) => {
-  const data = burndownData && burndownData.length > 0 ? burndownData : [
-    { day: 0, ideal: 100, actual: 100 },
-    { day: 1, ideal: 90, actual: 98 },
-    { day: 2, ideal: 80, actual: 85 },
-    { day: 3, ideal: 70, actual: 78 },
-    { day: 4, ideal: 60, actual: 65 },
-    { day: 5, ideal: 50, actual: 60, predicted: 60 },
-    { day: 6, ideal: 40, predicted: 52 },
-    { day: 7, ideal: 30, predicted: 45 },
-    { day: 8, ideal: 20, predicted: 35 },
-    { day: 9, ideal: 10, predicted: 22 },
-    { day: 10, ideal: 0, predicted: 10 },
-  ];
+const PredictiveBurndownChart: FC<BurndownChartProps> = ({ currentSprint }) => {
+  const [burndownData, setBurndownData] = useState<ChartPoint[]>([]);
+  const token = localStorage.getItem("token");
+
+  useEffect(() => {
+    const fetchBurndownData = async () => {
+      if (!currentSprint?.id) return;
+
+      console.log('Fetching burndown data for sprint:', currentSprint.id);
+
+      try {
+        const apiBase = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:3000';
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+
+        const res = await fetch(`${apiBase}/api/ts_forecast`, {
+          method: "POST",
+          headers,
+          credentials: "include",
+          body: JSON.stringify({ sprintId: currentSprint.id }),
+        });
+
+        if (!res.ok) {
+          console.warn('Failed to fetch burndown data, using fallback');
+          return;
+        }
+
+        const data = await res.json();
+        if (data.series) {
+          console.log('Received forecast data:', data);
+          const formattedData = data.series.map((point: any) => ({
+            day: parseInt(point.day.replace('Day ', '')),
+            ideal: point.ideal,
+            actual: point.actual,
+            predicted: point.predicted
+          }));
+          console.log('Formatted chart data:', formattedData);
+          setBurndownData(formattedData);
+        }
+      } catch (error) {
+        console.error('Error fetching burndown data:', error);
+      }
+    };
+
+    fetchBurndownData();
+  }, [currentSprint?.id, token]);
+
+  // Use real data if available, otherwise show a sample pattern
+  const data: ChartPoint[] = burndownData.length > 0 ? burndownData : [
+    { day: 1, ideal: 100, actual: 100 },
+    { day: 2, ideal: 90, actual: 95 },
+    { day: 3, ideal: 80, actual: 85 },
+    { day: 4, ideal: 70, actual: 78 },
+    { day: 5, ideal: 60, actual: 65 },
+    { day: 6, ideal: 50, actual: 60, predicted: 58 },
+    { day: 7, ideal: 40, predicted: 52 },
+    { day: 8, ideal: 30, predicted: 45 },
+    { day: 9, ideal: 20, predicted: 35 },
+    { day: 10, ideal: 10, predicted: 22 },
+    { day: 11, ideal: 0, predicted: 10 },
+  ].map(item => ({
+    ...item,
+    day: item.day, // Keep day as number for sorting
+    ideal: typeof item.ideal === 'number' ? Number(item.ideal.toFixed(1)) : null,
+    actual: typeof item.actual === 'number' ? Number(item.actual.toFixed(1)) : null,
+    predicted: typeof item.predicted === 'number' ? Number(item.predicted.toFixed(1)) : null,
+  }));
 
   return (
     <div className="bg-black/30 backdrop-blur-lg rounded-2xl p-6 border border-white/10 shadow-lg h-full">
       <h3 className="text-xl font-semibold text-gray-200 mb-1">Predictive Burndown</h3>
-      <p className="text-sm text-gray-400 mb-6">Tracking progress against ideal flow with AI-powered forecasting.</p>
-      <ResponsiveContainer width="100%" height={300}>
-        <LineChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#ffffff1a" />
-          <XAxis dataKey="day" stroke="#9CA3AF" fontSize={12} label={{ value: 'Sprint Day', position: 'insideBottom', offset: -5, fill: '#9CA3AF' }} />
-          <YAxis stroke="#9CA3AF" fontSize={12} label={{ value: 'Points', angle: -90, position: 'insideLeft', fill: '#9CA3AF' }} />
-          <Tooltip content={<CustomTooltip />} />
-          <Legend wrapperStyle={{fontSize: "14px"}} />
-          <Line type="monotone" dataKey="ideal" stroke="#4B5563" strokeWidth={2} name="Ideal" dot={false} />
-          <Line type="monotone" dataKey="actual" stroke="#3B82F6" strokeWidth={2} name="Actual" dot={{ r: 4 }} />
-          <Line type="monotone" dataKey="predicted" stroke="#A78BFA" strokeWidth={2} strokeDasharray="5 5" name="Predicted" />
-        </LineChart>
-      </ResponsiveContainer>
+      <p className="text-sm text-gray-400 mb-6">
+        Tracking progress against ideal flow with AI-powered forecasting
+        {data.length > 0 && data[0].actual && ` • Starting with ${data[0].actual} points`}
+      </p>
+      {data.some(d => d.predicted !== null) ? (
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#ffffff1a" />
+            <XAxis dataKey="day" stroke="#9CA3AF" fontSize={12} label={{ value: 'Sprint Day', position: 'insideBottom', offset: -5, fill: '#9CA3AF' }} />
+            <YAxis stroke="#9CA3AF" fontSize={12} label={{ value: 'Points', angle: -90, position: 'insideLeft', fill: '#9CA3AF' }} />
+            <Tooltip content={<CustomTooltip />} />
+            <Legend wrapperStyle={{fontSize: "14px"}} />
+            <Line type="monotone" dataKey="ideal" stroke="#4B5563" strokeWidth={2} name="Ideal" dot={false} />
+            <Line type="monotone" dataKey="actual" stroke="#3B82F6" strokeWidth={2} name="Actual" dot={{ r: 4 }} />
+            <Line type="monotone" dataKey="predicted" stroke="#A78BFA" strokeWidth={2} strokeDasharray="5 5" name="Predicted" />
+          </LineChart>
+        </ResponsiveContainer>
+      ) : (
+        <div className="flex items-center justify-center h-[300px] text-gray-400">
+          <p>Loading forecast data...</p>
+        </div>
+      )}
     </div>
   );
 };
@@ -179,6 +260,24 @@ const AIRecommendations = ({ recommendations }: { recommendations: any[] }) => {
       default: return <Lightbulb className="text-blue-400" />;
     }
   };
+
+  return (
+    <div className="bg-black/30 backdrop-blur-lg rounded-2xl p-6 border border-white/10 shadow-lg h-full">
+      <h3 className="text-xl font-semibold text-gray-200 mb-1">AI-Powered Insights ✨</h3>
+      <p className="text-sm text-gray-400 mb-6">Proactive recommendations to keep your sprint on track.</p>
+      <div className="space-y-4">
+        {displayRecommendations.map((rec, index) => (
+          <div key={index} className="flex items-start p-4 bg-white/5 rounded-lg hover:bg-white/10 transition-colors duration-200">
+            <div className="p-2 mr-4">{getIcon(rec.type)}</div>
+            <div>
+              <h4 className="font-semibold text-white">{rec.title}</h4>
+              <p className="text-sm text-gray-400">{rec.message}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <div className="bg-black/30 backdrop-blur-lg rounded-2xl p-6 border border-white/10 shadow-lg h-full">
@@ -327,8 +426,6 @@ useEffect(() => {
     );
   }
 
-  // const currentSprint = dashboardData?.currentSprint;
-  const burndownData = dashboardData?.burndownData || [];
   const aiRecommendations = dashboardData?.aiRecommendations || [];
 
   return (
@@ -360,7 +457,7 @@ useEffect(() => {
 
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           <div className="lg:col-span-3">
-            <PredictiveBurndownChart burndownData={burndownData} />
+            <PredictiveBurndownChart currentSprint={currentSprint} />
           </div>
           <div className="lg:col-span-2">
             <AIRecommendations recommendations={aiRecommendations} />
