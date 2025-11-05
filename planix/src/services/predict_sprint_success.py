@@ -3,11 +3,32 @@
 import joblib
 import pandas as pd
 import numpy as np
+import sys
+import json
+import time
 from typing import Dict, Any, Tuple
 from sklearn.pipeline import Pipeline
 # --- Configuration ---
 
-MODEL_PATH = '../models/sprint_success_model.pkl'
+import os.path
+
+def find_model_file():
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    possible_paths = [
+        os.path.join(script_dir, '..', 'models', 'sprint_success_model.pkl'),  # relative to script
+        os.path.join(script_dir, '..', '..', 'models', 'sprint_success_model.pkl'),  # from src/services to src/../models
+        os.path.join(os.getcwd(), 'src', 'models', 'sprint_success_model.pkl'),  # from cwd
+        os.path.join(os.getcwd(), 'models', 'sprint_success_model.pkl'),  # from cwd/models
+    ]
+    
+    for path in possible_paths:
+        if os.path.isfile(path):
+            return path
+    return None
+
+MODEL_PATH = find_model_file()
+if MODEL_PATH:
+    print(f"Found model at: {MODEL_PATH}", file=sys.stderr)
 
 # The exact features used during training
 FEATURE_COLUMNS = [
@@ -17,13 +38,31 @@ FEATURE_COLUMNS = [
     'workload_efficiency', 'task_density', 'team_experience'
 ]
 
-# Load the trained pipeline (preprocessor + model)
-try:
-    PIPELINE = joblib.load(MODEL_PATH)
-    # print("Model loaded")
-except FileNotFoundError:
-    print(f"ERROR: Model file not found at {MODEL_PATH}. Run the training notebook first.")
-    PIPELINE = None
+# Load the trained pipeline (preprocessor + model) with global caching
+PIPELINE = None
+_model_load_timestamp = None
+
+def get_pipeline():
+    global PIPELINE, _model_load_timestamp
+    
+    # If model is already loaded and it's been less than 1 hour, reuse it
+    if PIPELINE is not None and _model_load_timestamp is not None:
+        age = time.time() - _model_load_timestamp
+        if age < 3600:  # 1 hour cache
+            return PIPELINE
+    
+    if MODEL_PATH:
+        try:
+            PIPELINE = joblib.load(MODEL_PATH)
+            _model_load_timestamp = time.time()
+            print(f"Model loaded from {MODEL_PATH} at {time.strftime('%H:%M:%S')}", file=sys.stderr)
+            return PIPELINE
+        except Exception as e:
+            print(f"ERROR: Failed to load model from {MODEL_PATH}: {e}", file=sys.stderr)
+            return None
+    else:
+        print("ERROR: Could not find model file in any expected location", file=sys.stderr)
+        return None
 
 def calculate_confidence_interval(model: Pipeline, X_new: pd.DataFrame, num_bootstrap=100) -> Tuple[float, float]:
     """
@@ -59,7 +98,13 @@ def predict_sprint_success(sprint_data: Dict[str, Any]) -> Dict[str, Any]:
     2. Runs prediction.
     3. Calculates confidence interval.
     """
-    if PIPELINE is None:
+    # Debug: Print received data
+    print("DEBUG: Received sprint data:", file=sys.stderr)
+    print(json.dumps(sprint_data, indent=2), file=sys.stderr)
+    print("\nDEBUG: Using mock data?" + (" Yes" if sprint_data.get('teamId') == 2 else " No"), file=sys.stderr)
+    
+    pipeline = get_pipeline()
+    if pipeline is None:
         return {"error": "Model not loaded. Check model path."}
 
     # 1. Prepare data (must be a DataFrame for the Pipeline)
@@ -70,7 +115,7 @@ def predict_sprint_success(sprint_data: Dict[str, Any]) -> Dict[str, Any]:
         return {"error": f"Data preparation failed: {e}"}
 
     # 2. Prediction
-    predicted_score = PIPELINE.predict(X_new)[0]
+    predicted_score = pipeline.predict(X_new)[0]
     
     # Clip score to be between 0 and 1
     predicted_score = np.clip(predicted_score, 0.0, 1.0)
@@ -84,24 +129,45 @@ def predict_sprint_success(sprint_data: Dict[str, Any]) -> Dict[str, Any]:
         "confidence_value": round(upper_ci - lower_ci, 4) # Range of the CI
     }
 
-# --- Example Usage (when run directly) ---
+# --- CLI / stdin usage ---
 if __name__ == '__main__':
-    # This mock data must contain ALL required features, using the exact names
-    mock_sprint_features = {
-        'teamId': 2,
-        'sprint_duration': 14,
-        'total_backlog_items': 15,
-        'total_story_points': 100,
-        'completion_ratio': 0.95,
-        'avg_priority': 2.2,
-        'avg_delay_minutes': 30.5,
-        'on_time_completion_ratio': 0.85,
-        'velocity_efficiency': 1.1, # Team velocity is 110, target was 100
-        'workload_efficiency': 1.05,
-        'task_density': 3.0, # 42 tasks / 14 days
-        'team_experience': 3.8
-    }
+    # If JSON is piped to stdin, use it. Otherwise fall back to mock data.
+    try:
+        stdin_data = sys.stdin.read()
+        if stdin_data and stdin_data.strip():
+            try:
+                input_features = json.loads(stdin_data)
+            except Exception:
+                # If the input isn't proper JSON, ignore and use mock
+                input_features = None
+        else:
+            input_features = None
+    except Exception:
+        input_features = None
 
-    result = predict_sprint_success(mock_sprint_features)
-    print("\n--- Inference Result ---")
-    print(result)
+    if not input_features:
+        # This mock data must contain ALL required features, using the exact names
+        input_features = {
+            'teamId': 2,
+            'sprint_duration': 14,
+            'total_backlog_items': 15,
+            'total_story_points': 100,
+            'completion_ratio': 0.95,
+            'avg_priority': 2.2,
+            'avg_delay_minutes': 30.5,
+            'on_time_completion_ratio': 0.85,
+            'velocity_efficiency': 1.1, # Team velocity is 110, target was 100
+            'workload_efficiency': 1.05,
+            'task_density': 3.0, # 42 tasks / 14 days
+            'team_experience': 3.8
+        }
+
+    result = predict_sprint_success(input_features)
+    # Before we output, validate result is json-serializable
+    try:
+        output = json.dumps(result)
+        sys.stderr.write(f"DEBUG: About to output JSON: {output}\n")
+        print(output, flush=True)  # flush to ensure immediate output
+    except Exception as e:
+        sys.stderr.write(f"ERROR: Failed to serialize result: {e}\n")
+        print(json.dumps({"error": str(e)}))
